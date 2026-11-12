@@ -25,6 +25,7 @@ for (const dir of [binDir, modelsDir, tmpDir]) fs.mkdirSync(dir, { recursive: tr
 const activeDownloads = new Map();
 let activeProcess = null;
 let activeGenerationId = null;
+let cancellationRequested = false;
 let emitEvent = () => {};
 
 function setEventEmitter(emitter) {
@@ -260,19 +261,18 @@ function generate(params = {}) {
 
     const id = randomUUID();
     const progressState = { tail: '', lastStep: 0, lastTotalSteps: 0 };
-    emit({ type: 'generation', id, status: 'starting', step: 0, totalSteps: steps, progress: 0 });
     return new Promise((resolve, reject) => {
         let settled = false;
         const settleError = error => {
             if (settled) return; settled = true;
-            activeProcess = null; activeGenerationId = null;
             fs.rmSync(outputPath, { force: true });
-            emit({ type: 'generation', id, status: 'error', error: error.message });
+            if (!cancellationRequested) emit({ type: 'generation', id, status: 'error', error: error.message });
             reject(error);
         };
         const child = spawn(binaryPath, args, { env: { ...process.env, DYLD_LIBRARY_PATH: binDir, LD_LIBRARY_PATH: binDir } });
-        activeProcess = child; activeGenerationId = id;
+        activeProcess = child; activeGenerationId = id; cancellationRequested = false;
         const outputTail = [];
+        let processError = null;
         const startupAt = Date.now();
         let samplingStarted = false;
         emit({ type: 'generation', id, status: 'starting', step: 0, totalSteps: steps, progress: 0, message: 'Starting local model...' });
@@ -281,17 +281,23 @@ function generate(params = {}) {
         }, 5000);
         const stopHeartbeat = () => clearInterval(heartbeat);
         const onData = chunk => {
+            if (cancellationRequested) return;
             const text = chunk.toString(); outputTail.push(text); if (outputTail.length > 200) outputTail.shift();
             for (const event of parseProgress(text, progressState)) {
                 samplingStarted = true; stopHeartbeat(); emit({ type: 'generation', id, ...event });
             }
         };
         child.stdout.on('data', onData); child.stderr.on('data', onData);
-        child.on('error', settleError);
+        child.on('error', error => { processError = error; });
         child.on('close', code => {
             stopHeartbeat();
             if (activeProcess === child) { activeProcess = null; activeGenerationId = null; }
             if (settled) return;
+            if (cancellationRequested) {
+                settleError(Object.assign(new Error('Generation cancelled.'), { status: 409 }));
+                return;
+            }
+            if (processError) { settleError(processError); return; }
             if (code !== 0 || !fs.existsSync(outputPath)) {
                 const error = new Error(`sd.cpp exited with code ${code}:\n${outputTail.join('').slice(-4000)}`);
                 settleError(error); return;
@@ -303,7 +309,6 @@ function generate(params = {}) {
                 resolve(result);
             } catch (error) { settleError(error); }
         });
-        child.on('close', stopHeartbeat);
     });
 }
 function startupMessage(elapsedMs) {
@@ -313,11 +318,11 @@ function startupMessage(elapsedMs) {
     return `Loading local model (${Math.floor(seconds / 60)}m ${seconds % 60}s)...`;
 }
 function cancelGeneration() {
-    if (activeProcess) {
-        const child = activeProcess; const id = activeGenerationId;
-        activeProcess = null; activeGenerationId = null;
-        child.kill('SIGTERM');
-        emit({ type: 'generation', id, status: 'cancelled' });
+    if (activeProcess && !cancellationRequested) {
+        if (activeProcess.kill('SIGTERM')) {
+            cancellationRequested = true;
+            emit({ type: 'generation', id: activeGenerationId, status: 'cancelled' });
+        }
     }
     return { ok: true };
 }
@@ -331,6 +336,8 @@ module.exports = {
     downloadModel,
     generate,
     getBinaryStatus,
+    isGenerating: () => activeProcess !== null,
+    getActiveGenerationId: () => activeGenerationId,
     listModels,
     modelsDir,
     setEventEmitter,

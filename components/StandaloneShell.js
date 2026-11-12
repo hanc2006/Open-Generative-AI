@@ -10,7 +10,6 @@ const DesignAgentStudio = dynamic(() => import('studio').then(mod => mod.DesignA
   loading: () => <div className="h-full w-full bg-black flex items-center justify-center text-white/20">Loading Design Studio...</div>
 });
 import axios from 'axios';
-import ApiKeyModal from './ApiKeyModal';
 import { getCommonCopy, getLocaleConfig, localizeStudioPath } from '@/lib/locales';
 
 // Tab/category ids, icons, and English `label` fallbacks are stable
@@ -346,6 +345,9 @@ export default function StandaloneShell({ locale = 'en' }) {
 
   const [balance, setBalance] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [keyDraft, setKeyDraft] = useState('');
+  const [serverUrl, setServerUrl] = useState('');
+  const [serverToken, setServerToken] = useState('');
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
   const [showVadooBanner, setShowVadooBanner] = useState(() => {
@@ -585,19 +587,48 @@ export default function StandaloneShell({ locale = 'en' }) {
     }
   }, [fetchBalance]);
 
-  const handleKeySave = useCallback((key) => {
-    localStorage.setItem(STORAGE_KEY, key);
-    setApiKey(key);
-    fetchBalance(key);
-    document.cookie = `muapi_key=${key}; path=/; max-age=31536000; SameSite=Lax`;
-  }, [fetchBalance]);
-
   const handleKeyChange = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setApiKey(null);
+    setKeyDraft('');
     setBalance(null);
     document.cookie = "muapi_key=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
   }, []);
+
+  const openSettings = () => {
+    setKeyDraft(apiKey || '');
+    setServerUrl(localStorage.getItem('og_local_server_url') || '');
+    setServerToken(localStorage.getItem('og_local_server_token') || '');
+    setShowSettings(true);
+  };
+
+  const saveKey = () => {
+    const key = keyDraft.trim();
+    if (!key) {
+      handleKeyChange();
+      return;
+    }
+    localStorage.setItem(STORAGE_KEY, key);
+    setApiKey(key);
+    setBalance(null);
+    fetchBalance(key);
+    document.cookie = `muapi_key=${key}; path=/; max-age=31536000; SameSite=Lax`;
+  };
+
+  const saveServer = () => {
+    const url = serverUrl.trim();
+    if (url) localStorage.setItem('og_local_server_url', url);
+    else localStorage.removeItem('og_local_server_url');
+    if (serverToken) localStorage.setItem('og_local_server_token', serverToken);
+    else localStorage.removeItem('og_local_server_token');
+  };
+
+  const clearServer = () => {
+    localStorage.removeItem('og_local_server_url');
+    localStorage.removeItem('og_local_server_token');
+    setServerUrl('');
+    setServerToken('');
+  };
 
   // Inject API key into all outgoing Axios requests (prop-based approach)
   // We use an interceptor to be selective and NOT send the key to external domains like S3
@@ -674,10 +705,6 @@ export default function StandaloneShell({ locale = 'en' }) {
       <div className="animate-spin text-[#22d3ee] text-3xl">◌</div>
     </div>
   );
-
-  if (!apiKey) {
-    return <ApiKeyModal onSave={handleKeySave} locale={locale} />;
-  }
 
   return (
     <div 
@@ -796,15 +823,16 @@ export default function StandaloneShell({ locale = 'en' }) {
 
           {/* Right: Actions */}
           <div className="flex-shrink-0 flex items-center gap-3">
+            <a href="/local" className="text-xs font-bold text-cyan-300 hover:text-cyan-200">Local Inference</a>
             <div className="flex items-center gap-2.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/5 transition-colors">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               <span className="text-xs font-bold text-white/90">
-                ${balance !== null ? `${balance}` : '---'}
+                ${apiKey && balance !== null ? `${balance}` : '---'}
               </span>
             </div>
 
             <button
-              onClick={() => setShowSettings(true)}
+              onClick={openSettings}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-[13px] font-bold text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors"
               aria-label={copy.shell.settings}
             >
@@ -1175,30 +1203,35 @@ export default function StandaloneShell({ locale = 'en' }) {
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in-up">
-          <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-8 w-full max-w-sm shadow-2xl">
+          <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
             <h2 className="text-white font-bold text-lg mb-2">{copy.settingsModal.title}</h2>
-            <p className="text-white/40 text-[13px] mb-8">
-              {copy.settingsModal.subtitle}
-            </p>
-
-            <div className="space-y-4 mb-8">
-              <div className="bg-white/5 border border-white/[0.03] rounded-md p-4">
-                <label className="block text-xs font-bold text-white/30 mb-2">
-                   {copy.settingsModal.activeApiKey}
+            <div className="space-y-5 my-5">
+              <section className="space-y-3">
+                <label className="block text-xs text-white/60">MuAPI key (optional for local inference)
+                  <input type="password" autoComplete="off" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} className="mt-1 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white" />
                 </label>
-                <div className="text-[13px] font-mono text-white/80">
-                  {apiKey.slice(0, 8)}••••••••••••••••
+                <div className="flex gap-3">
+                  <button type="button" onClick={saveKey} className="rounded-md bg-cyan-300 px-4 py-2 text-xs font-semibold text-black">Save key</button>
+                  <button type="button" onClick={handleKeyChange} className="rounded-md bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-400">Clear key</button>
                 </div>
-              </div>
+              </section>
+              <section className="space-y-3">
+                <h3 className="text-sm font-bold">Local inference server</h3>
+                <label className="block text-xs text-white/60">Server URL
+                  <input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="http://127.0.0.1:3030" className="mt-1 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white" />
+                </label>
+                <label className="block text-xs text-white/60">****** (optional for loopback)
+                  <input type="password" autoComplete="off" value={serverToken} onChange={(e) => setServerToken(e.target.value)} className="mt-1 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white" />
+                </label>
+                <p className="text-xs text-white/50">Remote servers should use HTTPS or a trusted VPN and must allow this app&apos;s exact origin in their CORS configuration.</p>
+                <div className="flex flex-wrap gap-3">
+                  <button type="button" onClick={saveServer} className="rounded-md bg-cyan-300 px-4 py-2 text-xs font-semibold text-black">Save server</button>
+                  <button type="button" onClick={clearServer} className="rounded-md bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-400">Clear server</button>
+                  <a href="/local" className="rounded-md border border-white/10 px-4 py-2 text-xs font-semibold text-cyan-300">Open Local Inference</a>
+                </div>
+              </section>
             </div>
-
             <div className="flex gap-3">
-              <button
-                onClick={handleKeyChange}
-                className="flex-1 h-10 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-semibold transition-all"
-              >
-                {copy.settingsModal.changeKey}
-              </button>
               <button
                 onClick={() => setShowSettings(false)}
                 className="flex-1 h-10 rounded-md bg-white/5 text-white/80 hover:bg-white/10 text-xs font-semibold transition-all border border-white/5"

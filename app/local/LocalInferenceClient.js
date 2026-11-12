@@ -24,6 +24,8 @@ export default function LocalInferenceClient() {
   const [status, setStatus] = useState('Enter a server URL and connect.');
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [binaryAvailable, setBinaryAvailable] = useState(false);
   const [image, setImage] = useState('');
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState('');
@@ -47,13 +49,14 @@ export default function LocalInferenceClient() {
   }, [baseUrl, token]);
 
   const connect = useCallback(async () => {
-    setError(''); setStatus('Connecting…'); setConnected(false);
+    setError(''); setStatus('Connecting…'); setConnected(false); setBinaryAvailable(false);
     try {
       const [health, result] = await Promise.all([request('/health'), request('/models')]);
       setModels(result.models || []);
       setModelId((current) => (result.models || []).some((model) => model.id === current) ? current : (result.models || [])[0]?.id || '');
       setConnected(true);
-      setStatus(health.binary ? `Connected · sd.cpp ready · models stored at ${health.modelsDir}` : `Connected, but sd.cpp binary was not found at ${health.binaryPath}`);
+      setBinaryAvailable(health.exists);
+      setStatus(health.exists ? `Connected · sd.cpp ready · models stored at ${health.modelsDir}` : `Connected, but sd.cpp binary was not found at ${health.path}`);
       localStorage.setItem(URL_KEY, normalizeBaseUrl(baseUrl));
       if (token) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY);
     } catch (e) {
@@ -74,6 +77,27 @@ export default function LocalInferenceClient() {
       await refreshModels();
       setStatus(`${id} is ready.`);
     } catch (e) { setError(e.message); setStatus('Model download failed.'); }
+    finally { setBusy(false); }
+  };
+
+  const installBinary = async () => {
+    setBusy(true); setError(''); setStatus('Installing sd.cpp…');
+    try {
+      await request('/binary/download', { method: 'POST' });
+      const health = await request('/health');
+      setBinaryAvailable(health.exists);
+      setStatus(health.exists ? 'sd.cpp is ready.' : 'sd.cpp binary is still missing.');
+    } catch (e) { setError(e.message); setStatus('Binary installation failed.'); }
+    finally { setBusy(false); }
+  };
+
+  const downloadAuxiliary = async (key) => {
+    setBusy(true); setError(''); setStatus(`Downloading ${key}…`);
+    try {
+      await request(`/auxiliary/${key}/download`, { method: 'POST' });
+      await refreshModels();
+      setStatus(`${key} is ready.`);
+    } catch (e) { setError(e.message); setStatus('Auxiliary download failed.'); }
     finally { setBusy(false); }
   };
 
@@ -117,7 +141,7 @@ export default function LocalInferenceClient() {
   const generate = async (event) => {
     event.preventDefault();
     if (!modelId || !prompt.trim()) { setError('Choose a model and enter a prompt.'); return; }
-    setBusy(true); setError(''); setImage(''); setProgress(null);
+    setBusy(true); setGenerating(true); setError(''); setImage(''); setProgress(null);
     const eventTask = watchEvents();
     try {
       const result = await request('/generate', {
@@ -129,13 +153,18 @@ export default function LocalInferenceClient() {
       setStatus(`Complete · seed ${result.seed}`);
       setProgress({ progress: 1, step: Number(steps), totalSteps: Number(steps), status: 'done' });
     } catch (e) { setError(e.message); setStatus('Generation failed.'); }
-    finally { eventController.current?.abort(); await eventTask; setBusy(false); }
+    finally { eventController.current?.abort(); await eventTask; setBusy(false); setGenerating(false); }
   };
 
   const cancel = async () => {
     try { await request('/cancel', { method: 'POST', body: '{}' }); }
     catch (e) { setError(e.message); }
   };
+
+  const selectedModel = models.find((model) => model.id === modelId);
+  const missingAuxiliary = selectedModel?.requiresAuxiliary
+    ? ['llm', 'vae'].filter((key) => selectedModel.auxiliaryStatus?.[key] !== 'downloaded')
+    : [];
 
   return (
     <main className="min-h-screen bg-[#050505] text-white px-4 py-8 md:px-8">
@@ -150,15 +179,16 @@ export default function LocalInferenceClient() {
           <h2 className="font-bold">Inference server</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
             <label className="text-xs text-white/60">Server URL
-              <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={DEFAULT_URL} className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
+              <input value={baseUrl} onChange={(e) => { setBaseUrl(e.target.value); setConnected(false); }} disabled={busy} placeholder={DEFAULT_URL} className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
             </label>
             <label className="text-xs text-white/60">Bearer token (optional for loopback)
-              <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="LOCAL_AI_TOKEN" autoComplete="off" className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
+              <input type="password" value={token} onChange={(e) => { setToken(e.target.value); setConnected(false); }} disabled={busy} placeholder="LOCAL_AI_TOKEN" autoComplete="off" className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
             </label>
-            <button type="button" onClick={connect} className="self-end rounded-lg bg-cyan-300 px-5 py-2 text-sm font-bold text-black hover:bg-cyan-200">Connect</button>
+            <button type="button" onClick={connect} disabled={busy} className="self-end rounded-lg bg-cyan-300 px-5 py-2 text-sm font-bold text-black hover:bg-cyan-200 disabled:opacity-40">Connect</button>
           </div>
           <p className="mt-3 text-xs text-white/45">For remote servers, use HTTPS or a trusted VPN/reverse proxy and configure the server’s exact browser origin in <code>LOCAL_AI_ALLOWED_ORIGINS</code>. Do not expose an unauthenticated server to the internet.</p>
           <p role="status" className={`mt-3 text-sm ${connected ? 'text-emerald-300' : 'text-white/60'}`}>{status}</p>
+          {connected && !binaryAvailable && <button type="button" disabled={busy} onClick={installBinary} className="mt-3 rounded-lg border border-cyan-300/30 px-4 py-2 text-sm text-cyan-200 disabled:opacity-40">Install sd.cpp binary on server</button>}
           {error && <p role="alert" className="mt-2 text-sm text-red-300">{error}</p>}
         </section>
 
@@ -173,6 +203,12 @@ export default function LocalInferenceClient() {
             {connected && models.find((model) => model.id === modelId)?.state !== 'downloaded' && modelId && (
               <button type="button" disabled={busy} onClick={() => downloadModel(modelId)} className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">Download model to server</button>
             )}
+            {connected && missingAuxiliary.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-white/60">This model requires the missing Z-Image text encoder and/or VAE before generation.</p>
+                {missingAuxiliary.map((key) => <button key={key} type="button" disabled={busy} onClick={() => downloadAuxiliary(key)} className="mr-2 rounded-lg border border-cyan-300/30 px-4 py-2 text-sm text-cyan-200 disabled:opacity-40">Download {key === 'llm' ? 'text encoder' : 'VAE'}</button>)}
+              </div>
+            )}
             <label className="block text-xs text-white/60">Prompt
               <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} required rows={4} maxLength={10000} placeholder="Describe the image to create" className="mt-1 w-full resize-y rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
             </label>
@@ -186,8 +222,8 @@ export default function LocalInferenceClient() {
               <label className="text-xs text-white/60">Seed (-1 random)<input type="number" min="-1" value={seed} onChange={(e) => setSeed(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white" /></label>
             </div>
             <div className="flex gap-3">
-              <button disabled={!connected || busy || !models.some((model) => model.id === modelId && model.state === 'downloaded')} className="rounded-lg bg-cyan-300 px-5 py-2.5 text-sm font-black text-black disabled:cursor-not-allowed disabled:opacity-40">{busy ? 'Generating…' : 'Generate'}</button>
-              {busy && <button type="button" onClick={cancel} className="rounded-lg border border-red-400/30 px-4 py-2 text-sm text-red-200">Cancel</button>}
+              <button disabled={!connected || busy || !binaryAvailable || selectedModel?.state !== 'downloaded' || missingAuxiliary.length > 0} className="rounded-lg bg-cyan-300 px-5 py-2.5 text-sm font-black text-black disabled:cursor-not-allowed disabled:opacity-40">{generating ? 'Generating…' : 'Generate'}</button>
+              {generating && <button type="button" onClick={cancel} className="rounded-lg border border-red-400/30 px-4 py-2 text-sm text-red-200">Cancel</button>}
             </div>
             {progress && <div aria-live="polite" className="text-xs text-white/60">{progress.status === 'generating' ? `Step ${progress.step}/${progress.totalSteps}` : status}<div className="mt-2 h-1.5 overflow-hidden rounded bg-white/10"><div className="h-full bg-cyan-300 transition-all" style={{ width: `${Math.round((progress.progress || 0) * 100)}%` }} /></div></div>}
           </form>
