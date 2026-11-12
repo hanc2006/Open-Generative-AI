@@ -1,0 +1,29 @@
+'use strict';
+
+// Copy of Electron's pure local-model catalog, independent of Electron runtime.
+// Keep in sync with electron/lib/modelCatalog.js while Electron remains unchanged.
+const ZIMAGE_AUXILIARY = {
+    llm: {
+        id: '__llm__',
+        filename: 'Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf',
+        displayName: 'Qwen3-4B Text Encoder',
+        sizeGB: 2.4,
+        downloadUrl: 'https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf',
+    },
+    vae: {
+        id: '__vae__',
+        filename: 'ae.safetensors',
+        displayName: 'FLUX VAE',
+        sizeGB: 0.33,
+        downloadUrl: 'https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors',
+    },
+};
+const LOCAL_MODEL_CATALOG = [
+    { id: 'z-image-turbo', name: 'Z-Image Turbo', description: '8-step diffusion transformer; requires text encoder and VAE.', type: 'z-image', filename: 'z_image_turbo-Q4_K.gguf', sizeGB: 2.5, downloadUrl: 'https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf', aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'], defaultWidth: 1024, defaultHeight: 1024, defaultSteps: 8, defaultGuidance: 1, sampler: 'euler', scheduler: 'simple', featured: true, requiresAuxiliary: true },
+    { id: 'z-image-base', name: 'Z-Image Base', description: 'Higher-detail diffusion transformer; requires text encoder and VAE.', type: 'z-image', filename: 'z-image-Q4_K_M.gguf', sizeGB: 3.5, downloadUrl: 'https://huggingface.co/unsloth/Z-Image-GGUF/resolve/main/z-image-Q4_K_M.gguf', aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'], defaultWidth: 1024, defaultHeight: 1024, defaultSteps: 50, defaultGuidance: 7.5, sampler: 'euler', scheduler: 'simple', featured: true, requiresAuxiliary: true },
+    { id: 'dreamshaper-8', name: 'Dreamshaper 8', description: 'Versatile SD 1.5 model for portraits, landscapes, and artistic styles.', type: 'sd1', filename: 'DreamShaper_8_pruned.safetensors', sizeGB: 2.1, downloadUrl: 'https://huggingface.co/Lykon/DreamShaper/resolve/main/DreamShaper_8_pruned.safetensors', aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'], defaultWidth: 512, defaultHeight: 512, defaultSteps: 20, defaultGuidance: 7.5, sampler: 'euler_a' },
+    { id: 'realistic-vision-v51', name: 'Realistic Vision v5.1', description: 'Photorealistic SD 1.5 model.', type: 'sd1', filename: 'realisticVisionV51_v51VAE.safetensors', sizeGB: 2.1, downloadUrl: 'https://huggingface.co/SG161222/Realistic_Vision_V5.1_noVAE/resolve/main/Realistic_Vision_V5.1_fp16-no-ema.safetensors', aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'], defaultWidth: 512, defaultHeight: 768, defaultSteps: 25, defaultGuidance: 7, sampler: 'euler_a' },
+    { id: 'anything-v5', name: 'Anything v5', description: 'Anime and illustration model.', type: 'sd1', filename: 'Anything-v5.0-PRT.safetensors', sizeGB: 2.1, downloadUrl: 'https://huggingface.co/Yntec/AnythingV5/resolve/main/Anything-v5.0-PRT.safetensors', aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'], defaultWidth: 512, defaultHeight: 768, defaultSteps: 20, defaultGuidance: 7, sampler: 'euler_a' },
+    { id: 'stable-diffusion-xl-base', name: 'SDXL Base 1.0', description: 'Official Stable Diffusion XL base model.', type: 'sdxl', filename: 'sd_xl_base_1.0.safetensors', sizeGB: 6.9, downloadUrl: 'https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors', aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'], defaultWidth: 1024, defaultHeight: 1024, defaultSteps: 30, defaultGuidance: 7.5, sampler: 'dpmpp2m' },
+];
+module.exports = { LOCAL_MODEL_CATALOG, ZIMAGE_AUXILIARY };
