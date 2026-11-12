@@ -277,7 +277,7 @@ function generate(params = {}) {
         let samplingStarted = false;
         emit({ type: 'generation', id, status: 'starting', step: 0, totalSteps: steps, progress: 0, message: 'Starting local model...' });
         const heartbeat = setInterval(() => {
-            if (!samplingStarted && activeProcess === child) emit({ type: 'generation', id, status: 'starting', step: 0, totalSteps: steps, progress: 0, message: startupMessage(Date.now() - startupAt) });
+            if (!samplingStarted && !cancellationRequested && activeProcess === child) emit({ type: 'generation', id, status: 'starting', step: 0, totalSteps: steps, progress: 0, message: startupMessage(Date.now() - startupAt) });
         }, 5000);
         const stopHeartbeat = () => clearInterval(heartbeat);
         const onData = chunk => {
@@ -322,6 +322,10 @@ function cancelGeneration() {
         if (activeProcess.kill('SIGTERM')) {
             cancellationRequested = true;
             emit({ type: 'generation', id: activeGenerationId, status: 'cancelled' });
+            const child = activeProcess;
+            const timer = setTimeout(() => child.kill('SIGKILL'), 3000);
+            timer.unref();
+            child.once('close', () => clearTimeout(timer));
         }
     }
     return { ok: true };
@@ -338,6 +342,7 @@ module.exports = {
     getBinaryStatus,
     isGenerating: () => activeProcess !== null,
     getActiveGenerationId: () => activeGenerationId,
+    waitForGeneration: () => activeProcess ? new Promise(resolve => activeProcess.once('close', resolve)) : Promise.resolve(),
     listModels,
     modelsDir,
     setEventEmitter,

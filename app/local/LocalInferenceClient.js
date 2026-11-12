@@ -152,7 +152,10 @@ export default function LocalInferenceClient() {
       setImage(result.url);
       setStatus(`Complete · seed ${result.seed}`);
       setProgress({ progress: 1, step: Number(steps), totalSteps: Number(steps), status: 'done' });
-    } catch (e) { setError(e.message); setStatus('Generation failed.'); }
+    } catch (e) {
+      if (e.message === 'Generation cancelled.') setStatus('Generation cancelled.');
+      else { setError(e.message); setStatus('Generation failed.'); }
+    }
     finally { eventController.current?.abort(); await eventTask; setBusy(false); setGenerating(false); }
   };
 

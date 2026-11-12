@@ -1220,7 +1220,7 @@ export default function StandaloneShell({ locale = 'en' }) {
                 <label className="block text-xs text-white/60">Server URL
                   <input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="http://127.0.0.1:3030" className="mt-1 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white" />
                 </label>
-                <label className="block text-xs text-white/60">****** (optional for loopback)
+                <label className="block text-xs text-white/60">Server token (optional for loopback)
                   <input type="password" autoComplete="off" value={serverToken} onChange={(e) => setServerToken(e.target.value)} className="mt-1 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white" />
                 </label>
                 <p className="text-xs text-white/50">Remote servers should use HTTPS or a trusted VPN and must allow this app&apos;s exact origin in their CORS configuration.</p>

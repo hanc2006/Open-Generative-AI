@@ -43,4 +43,6 @@ The server binds to loopback by default. For non-loopback binding, a `LOCAL_AI_T
 
 ## Browser app
 
-The current browser client lives at `/local`. Configure the server URL/token there. For remote use, the server must allow the exact origin of the browser UI. This API and UI are separate from Electron IPC, but provide equivalent sd.cpp commands over HTTP.
+Start the Next.js app separately. The app opens without a MuAPI key; use its **Settings** modal to save or clear the optional MuAPI key and the server URL and token. The URL defaults to `http://127.0.0.1:3030`. Settings are stored in the browser's localStorage (`muapi_key`, `og_local_server_url`, and `og_local_server_token`), so use a trusted browser and device.
+
+Open **Local Inference** in the header or Settings to reach `/local`. Connect using the saved settings; the page also allows editing them. If health reports a missing binary, install it there, then download a model and any missing Z-Image text encoder and VAE before generating. The `/events` stream reports generation progress, and Cancel stops the active generation. For remote use, the server must allow the exact origin of the browser UI. This API and UI are separate from Electron IPC; other studios still use their existing cloud providers.
