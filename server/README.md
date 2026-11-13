@@ -14,7 +14,7 @@ export OPEN_GENERATIVE_AI_LOCAL_AI_DIR="$HOME/.local/share/open-generative-ai"
 npm run server:local-ai
 ```
 
-By default the service listens on `127.0.0.1:3030`. Set `HOST` and `PORT` as needed. For browser access, set `LOCAL_AI_ALLOWED_ORIGINS` to the exact web app origin (for example `http://localhost:3000`). Open **Local Inference** in the web app for sd.cpp setup and generation. In the Studio's **Settings → Local Models**, configure Wan2GP and manage local models.
+By default the service listens on `127.0.0.1:3030`. Set `HOST` and `PORT` as needed. For browser access, set `LOCAL_AI_ALLOWED_ORIGINS` to the exact web app origin (for example `http://localhost:5173`). In the Studio's **Settings → Local Models**, configure Wan2GP and manage local models.
 
 sd.cpp binaries and models are stored under the configured data directory (`bin/`, `models/`, `tmp/`). `SD_CPP_BINARY` overrides binary discovery and is never overwritten. Wan2GP settings, uploaded inputs, and generated results are stored under `wan2gp/` in the same data directory. Model and binary download URLs are catalog-controlled; clients cannot provide URLs.
 
@@ -64,4 +64,4 @@ The server binds to loopback by default. A non-loopback bind requires `LOCAL_AI_
 
 ## Browser app
 
-The browser stores the server URL and token in localStorage (`og_local_server_url` and `og_local_server_token`). sd.cpp results use the dedicated `/local` page; Wan2GP and sd.cpp model management and local generation in the Studio use the same HTTP service. Cloud studios continue to use their existing providers.
+The browser stores the server URL and token in localStorage (`og_local_server_url` and `og_local_server_token`). sd.cpp results can also be generated on the **Local Inference** tab; Wan2GP and sd.cpp model management and local generation in the Studio use the same HTTP service. Cloud studios continue to use their existing providers.

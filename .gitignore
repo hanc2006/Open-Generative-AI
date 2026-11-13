@@ -26,10 +26,6 @@ dist-ssr
 # Build output
 release/
 
-# Next.js
-.next/
-out/
-
 # Misc
 *.pem
 .env

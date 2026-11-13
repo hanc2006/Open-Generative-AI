@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DEFAULT_URL = 'http://127.0.0.1:3030';
@@ -10,7 +8,7 @@ function normalizeBaseUrl(value) {
   return value.trim().replace(/\/+$/, '');
 }
 
-export default function LocalInferenceClient() {
+export default function LocalInferenceStudio() {
   const [baseUrl, setBaseUrl] = useState(DEFAULT_URL);
   const [token, setToken] = useState('');
   const [models, setModels] = useState([]);
@@ -224,11 +222,10 @@ export default function LocalInferenceClient() {
   };
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white px-4 py-8 md:px-8">
+    <main className="h-full w-full overflow-y-auto bg-[#050505] text-white px-4 py-8 md:px-8">
       <div className="mx-auto max-w-5xl">
         <header className="mb-8">
-          <a href="/" className="text-xs text-cyan-300 hover:text-cyan-200">← Studio home</a>
-          <h1 className="mt-4 text-3xl font-black">Self-hosted image generation</h1>
+          <h1 className="text-3xl font-black">Self-hosted image generation</h1>
           <p className="mt-2 max-w-2xl text-sm text-white/55">Connect this browser to your own local or remote sd.cpp server. Prompts and generation requests go to that server; this page does not require a Muapi key.</p>
         </header>
 

@@ -10,12 +10,9 @@ import { getModelMediaCapabilities, mapReferenceParams } from './modelCapabiliti
 import { buildSupplementalInputPayload } from './modelParameters.js';
 import { getGroupedVideoConfiguration } from './groupedVideoModels.js';
 
-// In an http(s) browser we route through the host app's proxy (Next.js routes
-// under /api/* re-issue the call server-side) so api.muapi.ai CORS is bypassed.
-// SSR and browser clients call the upstream directly.
-const BASE_URL = (typeof window !== 'undefined' && window.location?.protocol?.startsWith('http'))
-    ? '/api'
-    : 'https://api.muapi.ai';
+// In Vite dev the host proxies /api/* to api.muapi.ai (see vite.config.mjs) to bypass CORS;
+// production builds call the upstream directly.
+const BASE_URL = import.meta.env?.DEV ? '/api' : 'https://api.muapi.ai';
 const PROXY_WF_BASE = '/api/workflow';
 const FILE_UPLOAD_TIMEOUT_MS = 300_000;
 const FILE_UPLOAD_PENDING_PROGRESS = 99;

@@ -2,6 +2,19 @@ import './style.css';
 import { Header } from './components/Header.js';
 import { ImageStudio } from './components/ImageStudio.js';
 
+const REACT_STUDIOS = {
+  layers: () => import('../packages/studio/src/components/LayersStudio.jsx'),
+  audio: () => import('../packages/studio/src/components/AudioStudio.jsx'),
+  clipping: () => import('../packages/studio/src/components/ClippingStudio.jsx'),
+  'motion-control': () => import('../packages/studio/src/components/MotionControlStudio.jsx'),
+  'vibe-motion': () => import('../packages/studio/src/components/VibeMotionStudio.jsx'),
+  'body-swap': () => import('../packages/studio/src/components/RecastStudio.jsx'),
+  marketing: () => import('../packages/studio/src/components/MarketingStudio.jsx'),
+  'ai-influencer': () => import('../packages/studio/src/components/AiInfluencerStudio.jsx'),
+  local: () => import('./components/LocalInferenceStudio.jsx'),
+  apps: () => import('../packages/studio/src/components/AppsStudio.jsx'),
+};
+
 const app = document.querySelector('#app');
 let contentArea;
 
@@ -46,6 +59,10 @@ function navigate(page) {
     } else if (page === 'agents') {
       import('./components/AgentStudio.js').then(({ AgentStudio }) => {
         wrapper.appendChild(AgentStudio());
+      });
+    } else if (REACT_STUDIOS[page]) {
+      import('./components/ReactStudio.js').then(({ ReactStudio }) => {
+        wrapper.appendChild(ReactStudio(REACT_STUDIOS[page]));
       });
     } else if (page === 'mcp-cli') {
       import('./components/McpCliStudio.js').then(({ McpCliStudio }) => {

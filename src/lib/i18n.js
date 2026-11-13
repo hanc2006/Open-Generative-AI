@@ -58,6 +58,16 @@ const translations = {
         'nav.workflows': 'Workflows',
         'nav.agents': 'Agents',
         'nav.mcpcli': 'MCP & CLI',
+        'nav.layers': 'Layers',
+        'nav.audio': 'Audio',
+        'nav.clipping': 'AI Clipping',
+        'nav.motionControl': 'Motion Control',
+        'nav.vibeMotion': 'Vibe Motion',
+        'nav.bodySwap': 'Body Swap',
+        'nav.marketing': 'Marketing',
+        'nav.aiInfluencer': 'AI Influencer',
+        'nav.apps': 'Explore Apps',
+        'nav.local': 'Local Inference',
         'nav.settings': 'Settings',
 
         // Sidebar
@@ -282,6 +292,16 @@ const translations = {
         'nav.workflows': '工作流',
         'nav.agents': '智能体',
         'nav.mcpcli': 'MCP & CLI',
+        'nav.layers': '图层',
+        'nav.audio': '音频',
+        'nav.clipping': 'AI 剪辑',
+        'nav.motionControl': '动作控制',
+        'nav.vibeMotion': 'Vibe 动效',
+        'nav.bodySwap': '换身',
+        'nav.marketing': '营销',
+        'nav.aiInfluencer': 'AI 网红',
+        'nav.apps': '探索应用',
+        'nav.local': '本地推理',
         'nav.settings': '设置',
 
         // Sidebar
