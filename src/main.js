@@ -11,6 +11,8 @@ const REACT_STUDIOS = {
   'body-swap': () => import('../packages/studio/src/components/RecastStudio.jsx'),
   marketing: () => import('../packages/studio/src/components/MarketingStudio.jsx'),
   'ai-influencer': () => import('../packages/studio/src/components/AiInfluencerStudio.jsx'),
+  workflows: () => import('./components/react/WorkflowHost.jsx'),
+  agents: () => import('./components/react/AgentsHost.jsx'),
   local: () => import('./components/LocalInferenceStudio.jsx'),
   apps: () => import('../packages/studio/src/components/AppsStudio.jsx'),
 };
@@ -51,14 +53,6 @@ function navigate(page) {
     } else if (page === 'lipsync') {
       import('./components/LipSyncStudio.js').then(({ LipSyncStudio }) => {
         wrapper.appendChild(LipSyncStudio());
-      });
-    } else if (page === 'workflows') {
-      import('./components/WorkflowStudio.js').then(({ WorkflowStudio }) => {
-        wrapper.appendChild(WorkflowStudio());
-      });
-    } else if (page === 'agents') {
-      import('./components/AgentStudio.js').then(({ AgentStudio }) => {
-        wrapper.appendChild(AgentStudio());
       });
     } else if (REACT_STUDIOS[page]) {
       import('./components/ReactStudio.js').then(({ ReactStudio }) => {
