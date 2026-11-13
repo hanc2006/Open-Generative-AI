@@ -35,6 +35,7 @@ export default function LocalInferenceClient() {
   const [image, setImage] = useState('');
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState('');
+  const streamReadyRef = useRef(false);
   const cancelled = useRef(false);
   const generationId = useRef(null);
   const cancelledId = useRef(null);
@@ -58,6 +59,7 @@ export default function LocalInferenceClient() {
 
   const connect = useCallback(async () => {
     setError(''); setStatus('Connecting…'); setConnected(false); setSession(null);
+    streamReadyRef.current = false;
     setStreamReady(false); setConnecting(true); setDownloads({}); setGenerating(false);
     try {
       const [health, result, auxiliaryResult] = await Promise.all([request('/health'), request('/models'), request('/auxiliaries')]);
@@ -84,6 +86,7 @@ export default function LocalInferenceClient() {
   }, [request]);
 
   const download = async (id, path, label) => {
+    if (!streamReadyRef.current || busy) return;
     setOperation('download'); setError(''); setStatus(`Downloading ${label}…`);
     setDownloads((current) => ({ ...current, [id]: { id, phase: 'starting', progress: 0 } }));
     try {
@@ -105,6 +108,9 @@ export default function LocalInferenceClient() {
     const handleEvent = (event) => {
       if (event.type === 'connected') {
         setGenerating(Boolean(event.activeId));
+        streamReadyRef.current = true;
+        setStreamReady(true);
+        setStatus('Connected to server and progress stream.');
       } else if (event.type === 'download' && event.id) {
         setDownloads((current) => ({ ...current, [event.id]: event }));
         if (event.phase === 'done' || event.phase === 'error') {
@@ -136,8 +142,6 @@ export default function LocalInferenceClient() {
       reader = response.body.getReader();
       await refreshSetup();
       if (controller.signal.aborted) break;
-      setStreamReady(true);
-      setStatus('Connected to server and progress stream.');
       const decoder = new TextDecoder();
       let buffer = '';
       while (true) {
@@ -159,6 +163,7 @@ export default function LocalInferenceClient() {
           console.warn('Local server event stream disconnected:', e);
         }
         if (controller.signal.aborted) break;
+        streamReadyRef.current = false;
         setStreamReady(false);
         setDownloads((current) => Object.fromEntries(Object.entries(current).map(([id, item]) => [
           id, ['done', 'error', 'cancelled'].includes(item.phase) ? item : { ...item, phase: 'interrupted' },
@@ -172,7 +177,7 @@ export default function LocalInferenceClient() {
       }
     };
     watch();
-    return () => { controller.abort(); clearTimeout(timer); };
+    return () => { streamReadyRef.current = false; controller.abort(); clearTimeout(timer); };
   }, [session, refreshSetup, baseUrl, token]);
 
   const selectedModel = models.find((model) => model.id === modelId);
@@ -181,13 +186,13 @@ export default function LocalInferenceClient() {
   const auxiliaryReady = Object.keys(auxiliaryStatus).length > 0 ? missingAuxiliary.length === 0 : !selectedModel?.requiresAuxiliary;
   const downloadActive = Object.values(downloads).some((item) => !['done', 'error', 'cancelled', 'interrupted'].includes(item.phase));
   const busy = Boolean(operation || generating || downloadActive);
-  const ready = connected && streamReady && binary?.exists && selectedModel?.state === 'downloaded' && auxiliaryReady && !busy;
+  const ready = connected && streamReady && binary?.exists && binary?.executable !== false && selectedModel?.state === 'downloaded' && auxiliaryReady && !busy;
 
   const generate = async (event) => {
     event.preventDefault();
-    if (!ready || !prompt.trim()) { setError('Complete setup, choose a model, and enter a prompt.'); return; }
+    if (!ready || !streamReadyRef.current || !prompt.trim()) { setError('Complete setup, choose a model, and enter a prompt.'); return; }
     cancelled.current = false;
-    setOperation('generation'); setGenerating(true); setError(''); setImage(''); setProgress(null); setStatus('Starting generation…');
+    setOperation('generation'); setError(''); setImage(''); setProgress(null); setStatus('Starting generation…');
     try {
       const result = await request('/generate', {
         method: 'POST',
@@ -204,6 +209,7 @@ export default function LocalInferenceClient() {
   };
 
   const cancel = async () => {
+    if (!generating || cancelling) return;
     setCancelling(true);
     cancelled.current = true;
     try { await request('/cancel', { method: 'POST', body: '{}' }); setStatus('Cancellation requested.'); }
@@ -212,6 +218,7 @@ export default function LocalInferenceClient() {
   };
 
   const disconnect = () => {
+    streamReadyRef.current = false;
     setSession(null); setConnected(false); setStreamReady(false);
     setStatus('Enter a server URL and connect.');
   };
@@ -240,8 +247,10 @@ export default function LocalInferenceClient() {
           <p role="status" className={`mt-3 text-sm ${connected ? 'text-emerald-300' : 'text-white/60'}`}>{status}</p>
           {error && <p role="alert" className="mt-2 text-sm text-red-300">{error}</p>}
           {connected && <div className="mt-4 space-y-3 text-sm text-white/70">
-            <p>sd.cpp: {binary?.exists ? 'Ready' : 'Not installed'}{binary?.path ? ` · ${binary.path}` : ''}</p>
-            {!binary?.exists && <button type="button" disabled={busy || !streamReady} onClick={() => download('__binary__', '/binary/download', 'sd.cpp')} className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">Download sd.cpp</button>}
+            <p>sd.cpp: {!binary?.exists ? 'Not installed' : binary.executable === false ? 'Not executable' : 'Ready'}{binary?.path ? ` · ${binary.path}` : ''}</p>
+            {!binary?.exists && binary?.override && <p className="text-amber-300">The configured SD_CPP_BINARY file is missing. Fix the path or unset SD_CPP_BINARY on the server, then reconnect before downloading.</p>}
+            {binary?.exists && binary.executable === false && <p className="text-amber-300">Make the configured sd.cpp binary executable on the server, then reconnect.</p>}
+            {!binary?.exists && !binary?.override && <button type="button" disabled={busy || !streamReady} onClick={() => download('__binary__', '/binary/download', 'sd.cpp')} className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">Download sd.cpp</button>}
             {Object.values(downloads).map((item) => {
               const label = item.id === '__binary__' ? 'sd.cpp' : auxiliaries.find((aux) => aux.id === item.id)?.displayName || models.find((model) => model.id === item.id)?.name || item.id;
               const percent = Number.isFinite(item.progress) ? Math.round(Math.max(0, Math.min(1, item.progress)) * 100) : null;
@@ -286,7 +295,7 @@ export default function LocalInferenceClient() {
             </div>
             <div className="flex gap-3">
               <button disabled={!ready || !prompt.trim()} className="rounded-lg bg-cyan-300 px-5 py-2.5 text-sm font-black text-black disabled:cursor-not-allowed disabled:opacity-40">{operation === 'generation' || generating ? 'Generating…' : 'Generate'}</button>
-              {(generating || operation === 'generation') && <button type="button" disabled={cancelling} onClick={cancel} className="rounded-lg border border-red-400/30 px-4 py-2 text-sm text-red-200 disabled:opacity-40">{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
+              {generating && <button type="button" disabled={cancelling} onClick={cancel} className="rounded-lg border border-red-400/30 px-4 py-2 text-sm text-red-200 disabled:opacity-40">{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
             </div>
             {progress && <div aria-live="polite" className="text-xs text-white/60">{progress.status === 'generating' ? `Step ${progress.step}/${progress.totalSteps}` : status}<div className="mt-2 h-1.5 overflow-hidden rounded bg-white/10"><div className="h-full bg-cyan-300 transition-all" style={{ width: `${Math.round((progress.progress || 0) * 100)}%` }} /></div></div>}
           </form>
