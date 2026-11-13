@@ -111,11 +111,12 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => console.log(`Local AI server listening on http://${host}:${port}; data: ${inference.dataDir}`));
-function shutdown() {
+async function shutdown() {
+    const generationStopped = inference.waitForGeneration();
     inference.cancelGeneration();
     for (const response of eventClients) response.end();
     eventClients.clear();
-    server.close(() => process.exit(0));
+    server.close(async () => { await generationStopped; process.exit(0); });
     setTimeout(() => process.exit(1), 5000).unref();
 }
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, shutdown);

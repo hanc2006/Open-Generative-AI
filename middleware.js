@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getLocaleFromPathname } from './lib/locales';
 
-function addSecurityHeaders(response) {
+function addSecurityHeaders(response, isLocalInference = false) {
     // Prevent MIME type sniffing (CWE-693)
     response.headers.set('X-Content-Type-Options', 'nosniff');
     // Prevent clickjacking (CWE-1021)
@@ -16,7 +16,7 @@ function addSecurityHeaders(response) {
     // and other muapi subdomains that the renderer fetches directly.
     response.headers.set(
         'Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://muapi.ai https://*.muapi.ai; font-src 'self' data:;"
+        `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://muapi.ai https://*.muapi.ai${isLocalInference ? ' http: https:' : ''}; font-src 'self' data:;`
     );
     return response;
 }
@@ -47,7 +47,7 @@ export function middleware(request) {
     // trick the main muapi client uses — see docs/localization.md).
     const response = NextResponse.next();
     response.headers.set('x-locale', getLocaleFromPathname(url.pathname));
-    return addSecurityHeaders(response);
+    return addSecurityHeaders(response, url.pathname === '/local' || url.pathname === '/local/');
 }
 
 // Match all paths for security headers. Exclude Next.js internal paths.
