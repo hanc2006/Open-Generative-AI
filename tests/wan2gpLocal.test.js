@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const local = require('../electron/lib/wan2gpLocal');
+const local = require('../server/wan2gp/wan2gpLocal');
 
 const FAKE_DIR = path.join(__dirname, 'fixtures', 'fake-wan2gp');
 // The fake wgp.py is a node script, so node plays the part of python.

@@ -40,8 +40,7 @@ export function VideoStudio() {
     container.className = 'w-full h-full flex flex-col items-center justify-center bg-app-bg relative p-4 md:p-6 overflow-y-auto custom-scrollbar overflow-x-hidden';
 
     // Cloud (Muapi) and local (Wan2GP) models live in separate lists; the
-    // "⚡ Local" toggle — shown only in the desktop app — picks which one the
-    // model dropdown and generation use.
+    // "⚡ Local" toggle picks which model list and generation provider to use.
     const localT2V = isLocalAIAvailable() ? localT2VModels.map(adaptLocalToVideoEntry) : [];
     const localI2V = isLocalAIAvailable() ? localI2VModels.map(adaptLocalToVideoEntry) : [];
     const allT2V = t2vModels;
@@ -433,7 +432,7 @@ export function VideoStudio() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="opacity-60 text-secondary"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"/></svg>
     `, 'Effect', 'v-effect-btn', 'Select effect type');
 
-    // Local / API source toggle (only shown in Electron) — same pattern as Image Studio.
+    // Local / API source toggle connects to the configured inference server.
     const refreshLocalAvailability = async () => {
         try {
             const models = await localAI.listModels();

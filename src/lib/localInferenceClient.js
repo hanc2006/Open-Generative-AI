@@ -1,119 +1,172 @@
-// Frontend client for local inference — wraps window.localAI (Electron IPC).
-// Two providers live behind the same surface:
-//   - sd.cpp: bundled engine, downloads weights to disk, runs locally
-//   - wan2gp: user-installed Wan2GP — a local folder (wgp.py CLI) or a remote MCP server
-// Provider is read off the model entry's `provider` field.
-
 import { getLocalModelById } from './localModels.js';
 
-export const isLocalAIAvailable = () => typeof window !== 'undefined' && !!window.localAI?.isElectron;
+const DEFAULT_URL = 'http://127.0.0.1:3030';
+const URL_KEY = 'og_local_server_url';
+const TOKEN_KEY = 'og_local_server_token';
+const uploadedInputs = new Map();
+
+export const isLocalAIAvailable = () => typeof window !== 'undefined' && typeof window.fetch === 'function';
 
 class LocalInferenceClient {
-    // ── sd.cpp APIs ───────────────────────────────────────────────────────
+    getSettings() {
+        return {
+            baseUrl: localStorage.getItem(URL_KEY) || DEFAULT_URL,
+            token: localStorage.getItem(TOKEN_KEY) || '',
+        };
+    }
+
+    async request(path, options = {}) {
+        const { baseUrl, token } = this.getSettings();
+        const base = baseUrl.trim().replace(/\/+$/, '');
+        if (!/^https?:\/\//i.test(base)) throw new Error('Local AI server URL must start with http:// or https://');
+        const headers = new Headers(options.headers || {});
+        if (token) headers.set('Authorization', `Bearer ${token}`);
+        if (options.body && !(options.body instanceof Blob) && !headers.has('Content-Type')) {
+            headers.set('Content-Type', 'application/json');
+        }
+        const response = await fetch(`${base}${path}`, { ...options, headers });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || `Local AI server returned HTTP ${response.status}`);
+        return body;
+    }
+
     async getBinaryStatus() {
-        if (!isLocalAIAvailable()) return { exists: false };
-        return window.localAI.getBinaryStatus();
+        return this.request('/health');
     }
     async downloadBinary() {
-        if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
-        return window.localAI.downloadBinary();
+        return this.request('/binary/download', { method: 'POST' });
     }
     async downloadModel(modelId) {
-        if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
-        return window.localAI.downloadModel(modelId);
+        return this.request(`/models/${encodeURIComponent(modelId)}/download`, { method: 'POST' });
     }
     async downloadAuxiliary(auxKey) {
-        if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
-        return window.localAI.downloadAuxiliary(auxKey);
+        return this.request(`/auxiliaries/${encodeURIComponent(auxKey)}/download`, { method: 'POST' });
     }
     async deleteModel(modelId) {
-        if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
-        return window.localAI.deleteModel(modelId);
+        return this.request(`/models/${encodeURIComponent(modelId)}`, { method: 'DELETE' });
     }
-
-    // ── Wan2GP APIs ───────────────────────────────────────────────────────
-    // Config: { dir, python, url, mode, defaultPython } — a folder wins over a URL.
     async getWan2gpConfig() {
-        if (!isLocalAIAvailable()) return { dir: '', python: '', url: '' };
-        return window.localAI.wan2gp.getConfig();
+        return this.request('/wan2gp/config');
     }
     async setWan2gpConfig(cfg) {
-        if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
-        return window.localAI.wan2gp.setConfig(cfg);
+        return this.request('/wan2gp/config', { method: 'POST', body: JSON.stringify(cfg) });
     }
     async setWan2gpUrl(url) {
-        if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
-        return window.localAI.wan2gp.setUrl(url);
+        const config = await this.getWan2gpConfig();
+        return this.setWan2gpConfig({ ...config, url });
     }
-    // Local folder: `wgp.py --dry-run` on a test task. Remote URL: MCP probe.
     async checkWan2gp(cfg) {
-        if (!isLocalAIAvailable()) return { ok: false, error: 'Not in desktop app' };
-        return window.localAI.wan2gp.check(cfg);
+        return this.request('/wan2gp/check', { method: 'POST', body: JSON.stringify(cfg) });
     }
     async pickWan2gpFolder() {
-        if (!isLocalAIAvailable()) return null;
-        return window.localAI.wan2gp.pickFolder();
+        return null;
     }
     async probeWan2gp(url) {
-        if (!isLocalAIAvailable()) return { ok: false, error: 'Not in desktop app' };
-        return window.localAI.wan2gp.probe(url);
+        return this.request('/wan2gp/probe', { method: 'POST', body: JSON.stringify({ url }) });
     }
-    // Saves a start frame on disk and returns { url: file://…, path }. Local
-    // runs pass the path to Wan2GP; remote runs upload it to the MCP server.
     async uploadFileToWan2gp(file) {
-        if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
-        const buf = await file.arrayBuffer();
-        return window.localAI.wan2gp.uploadFile({
-            name: file.name,
-            type: file.type,
-            bytes: new Uint8Array(buf),
+        const { baseUrl, token } = this.getSettings();
+        const headers = new Headers({ 'Content-Type': file.type });
+        if (token) headers.set('Authorization', `Bearer ${token}`);
+        const response = await fetch(`${baseUrl.trim().replace(/\/+$/, '')}/wan2gp/upload`, {
+            method: 'POST',
+            headers,
+            body: file,
         });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `Local AI server returned HTTP ${response.status}`);
+        const url = URL.createObjectURL(file);
+        uploadedInputs.set(url, result.id);
+        return { url };
     }
 
-    // ── Unified model list (both providers merged) ────────────────────────
     async listModels() {
-        if (!isLocalAIAvailable()) return [];
-        const [sdcpp, wan2gp] = await Promise.all([
-            window.localAI.listModels(),
-            window.localAI.wan2gp.listModels().catch(() => []),
+        const [sdCpp, wan2gp] = await Promise.all([
+            this.request('/models'),
+            this.request('/wan2gp/models'),
         ]);
         return [
-            ...sdcpp.map(m => ({ ...m, provider: m.provider || 'sdcpp' })),
-            ...wan2gp,
+            ...(sdCpp.models || []).map(model => ({ ...model, provider: model.provider || 'sdcpp' })),
+            ...(wan2gp.models || []),
         ];
     }
 
-    // ── Provider-aware generate ───────────────────────────────────────────
     async generate(params) {
-        if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
         const model = getLocalModelById(params.model);
         if (model?.provider === 'wan2gp') {
-            return window.localAI.wan2gp.generate(params);
+            const image = uploadedInputs.get(params.image) || params.image;
+            const result = await this.request('/wan2gp/generate', {
+                method: 'POST',
+                body: JSON.stringify({ ...params, image }),
+            });
+            const mediaPath = `/wan2gp/media/${encodeURIComponent(result.runId)}/${encodeURIComponent(result.filename)}`;
+            const media = await this.requestMedia(mediaPath);
+            return { ...result, url: URL.createObjectURL(media) };
         }
-        return window.localAI.generate(params);
+        return this.request('/generate', { method: 'POST', body: JSON.stringify(params) });
+    }
+
+    async requestMedia(path) {
+        const { baseUrl, token } = this.getSettings();
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const response = await fetch(`${baseUrl.trim().replace(/\/+$/, '')}${path}`, { headers });
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.error || `Local AI server returned HTTP ${response.status}`);
+        }
+        return response.blob();
     }
 
     cancelGeneration() {
         if (!isLocalAIAvailable()) return;
-        // Ask both — only the running one reacts.
-        window.localAI.cancelGeneration();
-        window.localAI.wan2gp.cancelGeneration();
+        this.request('/cancel', { method: 'POST', body: '{}' }).catch(error => console.error(error));
+        this.request('/wan2gp/cancel', { method: 'POST', body: '{}' }).catch(error => console.error(error));
     }
 
-    /**
-     * Subscribe to generation progress events.
-     * sd.cpp emits { step, totalSteps, progress, status }.
-     * Wan2GP emits { progress, status, step?, totalSteps?, downloadedBytes? } with status
-     * starting | downloading | loading | encoding | generating | decoding | saving | done.
-     */
+    subscribe(type, callback) {
+        if (!isLocalAIAvailable()) return () => {};
+        const controller = new AbortController();
+        let retryTimer;
+        const { baseUrl, token } = this.getSettings();
+        const connect = async () => {
+            try {
+                const response = await fetch(`${baseUrl.trim().replace(/\/+$/, '')}/events`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    signal: controller.signal,
+                });
+                if (!response.ok || !response.body) throw new Error(`Event stream returned HTTP ${response.status}`);
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                while (!controller.signal.aborted) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const frames = buffer.split(/\r\n\r\n|\n\n|\r\r/);
+                    buffer = frames.pop() || '';
+                    for (const frame of frames) {
+                        const data = frame.split(/\r\n|\n|\r/).find(line => line.startsWith('data:'))?.slice(5).trim();
+                        if (!data) continue;
+                        try {
+                            const event = JSON.parse(data);
+                            if (type === 'generation' ? event.type === 'generation' : event.type === 'download') callback(event);
+                        } catch { /* Ignore malformed event frames. */ }
+                    }
+                }
+            } catch (error) {
+                if (!controller.signal.aborted) console.warn('Local AI event stream disconnected:', error);
+            }
+            if (!controller.signal.aborted) retryTimer = setTimeout(connect, 2000);
+        };
+        connect();
+        return () => { controller.abort(); clearTimeout(retryTimer); };
+    }
+
     onProgress(callback) {
-        if (!isLocalAIAvailable()) return () => {};
-        return window.localAI.onProgress(callback);
+        return this.subscribe('generation', callback);
     }
-
     onDownloadProgress(callback) {
-        if (!isLocalAIAvailable()) return () => {};
-        return window.localAI.onDownloadProgress(callback);
+        return this.subscribe('download', callback);
     }
 }
 

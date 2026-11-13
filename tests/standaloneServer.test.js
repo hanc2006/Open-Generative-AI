@@ -47,6 +47,27 @@ test('HTTP server enforces auth and exact CORS, and exposes status and events', 
         assert.equal(health.active, false);
         const models = await (await fetch(`${base}/models`, { headers })).json();
         assert.ok(models.models.some(model => model.id === 'z-image-turbo' && model.auxiliaryStatus.llm === 'not-downloaded'));
+        const wanConfig = await (await fetch(`${base}/wan2gp/config`, { headers })).json();
+        assert.equal(wanConfig.mode, null);
+        const wanModels = await (await fetch(`${base}/wan2gp/models`, { headers })).json();
+        assert.ok(wanModels.models.some(model => model.id === 'wan2gp:wan22-i2v' && !model.ready));
+        const upload = await fetch(`${base}/wan2gp/upload`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'image/png' },
+            body: Buffer.from('fake image'),
+        });
+        assert.equal(upload.status, 200);
+        const uploadedInput = await upload.json();
+        assert.match(uploadedInput.id, /^[\da-f-]{36}\.png$/i);
+        const checkResponse = await fetch(`${base}/wan2gp/check`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dir: '/missing/wan2gp', quick: true }),
+        });
+        assert.equal(checkResponse.status, 200);
+        const check = await checkResponse.json();
+        assert.equal(check.ok, false);
+        assert.match(check.error, /Folder not found/);
         const events = await fetch(`${base}/events`, { headers });
         const reader = events.body.getReader();
         const first = await reader.read();

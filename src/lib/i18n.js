@@ -221,7 +221,7 @@ const translations = {
 
         // Local Model Manager
         'localModels.title': 'Local Models',
-        'localModels.webOnly': 'Local model inference is only available in the desktop app (Electron build). Use npm run electron:build to build.',
+        'localModels.webOnly': 'Local inference requires the Open Generative AI server. Start it with npm run server:local-ai and configure its URL in Settings.',
         'localModels.inferenceEngine': 'Inference Engine',
         'localModels.checking': 'Checking...',
         'localModels.installed': 'Installed and ready',
@@ -246,8 +246,8 @@ const translations = {
         'localModels.notConfigured': 'Not configured',
         'localModels.notConfiguredNote': 'Not configured (Wan2GP models will appear offline)',
         'localModels.wan2gpTitle': 'Wan2GP — local video models (optional)',
-        'localModels.wan2gpHelp': 'Install <a href="https://github.com/deepbeepmeep/Wan2GP" target="_blank" class="text-primary hover:underline">Wan2GP</a> on a machine with an NVIDIA/AMD GPU. With its folder set, the app runs Wan2GP itself — weights download on first use of each model.',
-        'localModels.wan2gpFolder': 'Wan2GP folder on this computer',
+        'localModels.wan2gpHelp': 'Install <a href="https://github.com/deepbeepmeep/Wan2GP" target="_blank" class="text-primary hover:underline">Wan2GP</a> on the inference server host with an NVIDIA/AMD GPU. Enter the server-side folder path below; weights download on first use.',
+        'localModels.wan2gpFolder': 'Wan2GP folder on the server host',
         'localModels.browse': 'Browse',
         'localModels.pythonPath': 'Python (default: <folder>/venv/bin/python)',
         'localModels.pythonDefault': (path) => `Python (default: ${path})`,
@@ -445,7 +445,7 @@ const translations = {
 
         // Local Model Manager
         'localModels.title': '本地模型',
-        'localModels.webOnly': '本地模型推理仅在桌面应用（Electron 构建版）中可用。使用 npm run electron:build 进行构建。',
+        'localModels.webOnly': '本地推理需要 Open Generative AI 服务器。运行 npm run server:local-ai，并在设置中配置服务器地址。',
         'localModels.inferenceEngine': '推理引擎',
         'localModels.checking': '检查中...',
         'localModels.installed': '已安装，可以使用',
@@ -470,8 +470,8 @@ const translations = {
         'localModels.notConfigured': '未配置',
         'localModels.notConfiguredNote': '未配置（Wan2GP 模型将显示为离线）',
         'localModels.wan2gpTitle': 'Wan2GP — 本地视频模型（可选）',
-        'localModels.wan2gpHelp': '在配备 NVIDIA/AMD GPU 的机器上安装 <a href="https://github.com/deepbeepmeep/Wan2GP" target="_blank" class="text-primary hover:underline">Wan2GP</a>。设置其文件夹后，应用会自行运行 Wan2GP——每个模型首次使用时下载权重。',
-        'localModels.wan2gpFolder': '本机上的 Wan2GP 文件夹',
+        'localModels.wan2gpHelp': '在配备 NVIDIA/AMD GPU 的推理服务器上安装 <a href="https://github.com/deepbeepmeep/Wan2GP" target="_blank" class="text-primary hover:underline">Wan2GP</a>。请填写服务器上的文件夹路径；每个模型首次使用时会下载权重。',
+        'localModels.wan2gpFolder': '服务器上的 Wan2GP 文件夹',
         'localModels.browse': '浏览',
         'localModels.pythonPath': 'Python（默认：<文件夹>/venv/bin/python）',
         'localModels.pythonDefault': (path) => `Python（默认：${path}）`,

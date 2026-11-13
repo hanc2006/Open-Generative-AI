@@ -61,12 +61,25 @@ export function SettingsModal(onClose) {
             <p style="font-size:0.7rem;color:rgba(255,255,255,0.3);margin:0;">
                 ${t('settings.keyNote')}
             </p>
+            <div style="padding-top:0.75rem;border-top:1px solid rgba(255,255,255,0.06);">
+                <h3 style="font-size:0.75rem;font-weight:700;color:#fff;margin:0 0 0.75rem;">Local inference server</h3>
+                <label style="display:block;font-size:0.7rem;color:rgba(255,255,255,0.5);margin-bottom:0.4rem;font-weight:600;">Server URL</label>
+                <input id="settings-local-server-url" type="url"
+                    style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:0.75rem;padding:0.6rem 0.9rem;color:#fff;font-size:0.875rem;outline:none;"
+                    placeholder="http://127.0.0.1:3030">
+                <label style="display:block;font-size:0.7rem;color:rgba(255,255,255,0.5);margin:0.75rem 0 0.4rem;font-weight:600;">Bearer token</label>
+                <input id="settings-local-server-token" type="password" autocomplete="off"
+                    style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:0.75rem;padding:0.6rem 0.9rem;color:#fff;font-size:0.875rem;outline:none;"
+                    placeholder="Optional for loopback servers">
+            </div>
             <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.5rem;">
                 <button id="settings-cancel-btn" style="padding:0.5rem 1rem;border-radius:0.5rem;background:none;border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);font-size:0.75rem;font-weight:700;cursor:pointer;">${t('common.cancel')}</button>
                 <button id="settings-save-btn" style="padding:0.5rem 1rem;border-radius:0.5rem;background:var(--color-primary,#22d3ee);color:#000;font-size:0.75rem;font-weight:700;cursor:pointer;border:none;">${t('common.save')}</button>
             </div>
         </div>
     `;
+    apiPanel.querySelector('#settings-local-server-url').value = localStorage.getItem('og_local_server_url') || 'http://127.0.0.1:3030';
+    apiPanel.querySelector('#settings-local-server-token').value = localStorage.getItem('og_local_server_token') || '';
 
     // ── Tab: Local Models ─────────────────────────────────────────────────────
     const localPanel = LocalModelManager();
@@ -102,12 +115,15 @@ export function SettingsModal(onClose) {
     apiPanel.querySelector('#settings-cancel-btn').onclick = close;
     apiPanel.querySelector('#settings-save-btn').onclick = () => {
         const key = apiPanel.querySelector('#settings-api-key').value.trim();
-        if (key) {
-            localStorage.setItem('muapi_key', key);
-            close();
-        } else {
-            alert(t('settings.invalidKey'));
-        }
+        const serverUrl = apiPanel.querySelector('#settings-local-server-url').value.trim().replace(/\/+$/, '');
+        const serverToken = apiPanel.querySelector('#settings-local-server-token').value.trim();
+        if (key) localStorage.setItem('muapi_key', key);
+        else localStorage.removeItem('muapi_key');
+        if (serverUrl) localStorage.setItem('og_local_server_url', serverUrl);
+        else localStorage.removeItem('og_local_server_url');
+        if (serverToken) localStorage.setItem('og_local_server_token', serverToken);
+        else localStorage.removeItem('og_local_server_token');
+        close();
     };
 
     header.querySelector('#settings-close-btn').onclick = close;

@@ -1,52 +1,67 @@
-# Local sd.cpp inference server
+# Local inference server
 
-This standalone Node.js service is an Electron-independent port of the sd.cpp behavior in `electron/lib/localInference.js`. Electron files are intentionally left untouched. The copied server modules provide binary discovery/download, model and auxiliary-file management, generation, cancellation, and progress events over HTTP/SSE.
+This standalone Node.js service exposes the local inference features over HTTP and SSE. It supports sd.cpp text-to-image models and Wan2GP image/video generation, with Wan2GP either installed on the server host or reached through its MCP API.
 
 ## Requirements and start
 
 - Node.js 18+
-- Automatic engine installation supports macOS arm64, Linux x64/arm64, and Windows x64, subject to available upstream release assets. Other platforms can use a compatible existing binary via `SD_CPP_BINARY`.
-- Unix installation requires `unzip`; Windows requires PowerShell with `Expand-Archive`. The selected engine may have additional CPU/GPU and system-library requirements.
-- Available disk space and compatible CPU/GPU memory for downloaded models.
+- Automatic sd.cpp installation supports macOS arm64, Linux x64/arm64, and Windows x64 when upstream release assets are available. Unix needs `unzip`; Windows needs PowerShell with `Expand-Archive`.
+- Wan2GP local mode requires a Wan2GP installation and its Python virtual environment on the server host. Remote mode requires Wan2GP's MCP server.
+- Sufficient disk space and compatible CPU/GPU memory for model weights.
 
 ```sh
 export OPEN_GENERATIVE_AI_LOCAL_AI_DIR="$HOME/.local/share/open-generative-ai"
-node server/server.js
+npm run server:local-ai
 ```
 
-Defaults to loopback `127.0.0.1:3030`; set `HOST` and `PORT` as needed. Set `LOCAL_AI_ALLOWED_ORIGINS` to the exact web app origin (for example `http://localhost:3000`) before starting the server. Open `/local` in the web app, connect to the server, install the engine, download a model, and download both the text encoder and VAE if using Z-Image. Then generate; no Muapi key is required.
+By default the service listens on `127.0.0.1:3030`. Set `HOST` and `PORT` as needed. For browser access, set `LOCAL_AI_ALLOWED_ORIGINS` to the exact web app origin (for example `http://localhost:3000`). Open **Local Inference** in the web app for sd.cpp setup and generation. In the Studio's **Settings → Local Models**, configure Wan2GP and manage local models.
 
-The binary and models are stored under the configured data directory (`bin/`, `models/`, `tmp/`). `SD_CPP_BINARY` overrides discovery and is never overwritten; if the override is missing, fix or unset it before installing. The server follows HTTPS redirects for catalog-selected model URLs and release-selected binaries; clients cannot provide download URLs. Downloads resume on retry where supported and failed partial files are removed. A second download of the same target receives HTTP 409.
+sd.cpp binaries and models are stored under the configured data directory (`bin/`, `models/`, `tmp/`). `SD_CPP_BINARY` overrides binary discovery and is never overwritten. Wan2GP settings, uploaded inputs, and generated results are stored under `wan2gp/` in the same data directory. Model and binary download URLs are catalog-controlled; clients cannot provide URLs.
 
-## HTTP API (parallels Electron IPC)
+## HTTP API
 
-| HTTP | Electron IPC counterpart | Description |
-|---|---|---|
-| `GET /health` or `/status` | `local-ai:binary-status` | Binary and storage status |
-| `POST /binary/download` | `local-ai:download-binary` | Find/download/extract compatible sd.cpp binary |
-| `GET /models` | `local-ai:list-models` | Models and file/auxiliary status |
-| `GET /auxiliaries` | — | Z-Image component status |
-| `POST /models/{id}/download` | `local-ai:download-model` | Download a catalog model |
-| `POST /auxiliaries/{llm|vae}/download` | `local-ai:download-auxiliary` | Download required Z-Image files (the legacy singular `/auxiliary/` route also works) |
-| `DELETE /models/{id}` | `local-ai:delete-model` | Remove model and partial file |
-| `POST /generate` | `local-ai:generate` | Run sd.cpp image generation |
-| `POST /cancel` | `local-ai:cancel-generation` | Stop the active generation |
-| `GET /events` | IPC progress events | SSE download/generation progress |
+All routes accept the optional bearer token configured through `LOCAL_AI_TOKEN`. JSON routes use JSON request/response bodies unless noted. Progress from both engines is broadcast through `GET /events`.
 
-Generate JSON example:
+| Method and path | Description |
+|---|---|
+| `GET /health` or `/status` | sd.cpp binary and storage status, plus active-generation state |
+| `POST /binary/download` | Download and install compatible sd.cpp |
+| `GET /models` | sd.cpp model and auxiliary-file status |
+| `GET /auxiliaries` | Z-Image text encoder and VAE status |
+| `POST /models/{id}/download` | Download a catalog model |
+| `POST /auxiliaries/{llm\|vae}/download` | Download a required Z-Image component |
+| `DELETE /models/{id}` | Delete an sd.cpp model |
+| `POST /generate` | Generate an sd.cpp image |
+| `POST /cancel` | Cancel sd.cpp generation |
+| `GET /wan2gp/config` | Read Wan2GP folder, Python, and MCP URL settings |
+| `POST /wan2gp/config` | Save Wan2GP settings (`{"dir":"","python":"","url":""}`); a folder takes precedence over a URL |
+| `POST /wan2gp/check` | Validate local installation (optionally `{"quick":true}`) or probe configured MCP server |
+| `POST /wan2gp/probe` | Probe an MCP server (`{"url":"http://host:7866/mcp"}`) |
+| `GET /wan2gp/models` | Wan2GP model availability |
+| `POST /wan2gp/upload` | Upload a PNG/JPEG/WebP start frame as raw bytes; returns an opaque input ID |
+| `POST /wan2gp/generate` | Generate a Wan2GP image or video |
+| `POST /wan2gp/cancel` | Cancel Wan2GP generation |
+| `GET /wan2gp/media/{runId}/{filename}` | Retrieve a generated result |
+| `GET /events` | SSE stream for downloads and generation progress |
 
-```json
-{"model":"dreamshaper-8","prompt":"a mountain lake at sunrise","aspect_ratio":"1:1","steps":20,"guidance_scale":7.5,"seed":42}
+sd.cpp generation accepts JSON such as `{"model":"dreamshaper-8","prompt":"a mountain lake at sunrise","aspect_ratio":"1:1","steps":20,"guidance_scale":7.5,"seed":42}`. Wan2GP generation accepts `model`, `prompt`, optional `negative_prompt`, `aspect_ratio`, `steps`, `video_length`, `seed`, and an uploaded input ID in `image` for image-to-video. The generation response identifies the result using `runId`, `filename`, and `mediaType`; use the media route to retrieve it.
+
+## Wan2GP setup
+
+For local mode, enter the Wan2GP directory path as seen by the server host; optionally enter a Python executable path. The default is `<Wan2GP>/venv/bin/python` on Unix or `<Wan2GP>\venv\Scripts\python.exe` on Windows. The browser cannot browse the server's filesystem. Wan2GP downloads model weights on first use.
+
+For remote mode, start Wan2GP's documented MCP server on the GPU host:
+
+```sh
+python wgp.py --mcp --mcp-api-version 1 --mcp-transport streamable-http --mcp-host 0.0.0.0 --mcp-port 7866
 ```
 
-The first implementation supports text-to-image. Image-conditioned editing and Wan2GP are not included in this sd.cpp HTTP port.
+Configure its MCP URL, such as `http://gpu-host:7866/mcp`. The Wan2GP Gradio web UI port (usually 7860) is not a generation API. A local folder takes precedence if both modes are configured.
 
 ## Remote access security
 
-The server binds to loopback by default. For non-loopback binding, a `LOCAL_AI_TOKEN` is mandatory; requests use `Authorization: Bearer <token>`. Set `LOCAL_AI_ALLOWED_ORIGINS` to a comma-separated exact origin allowlist for browser access. Use HTTPS or a trusted VPN; do not expose this service directly to the public internet. Bearer tokens sent over plain HTTP can be intercepted. The server trusts HTTPS redirects from its catalog and release sources, including their CDN hosts.
+The server binds to loopback by default. A non-loopback bind requires `LOCAL_AI_TOKEN`; send it as `Authorization: Bearer <token>`. Set `LOCAL_AI_ALLOWED_ORIGINS` to a comma-separated exact origin allowlist for browser access. Use HTTPS or a trusted VPN; do not expose this service directly to the public internet. The server trusts HTTPS redirects from catalog-selected download sources. Only configure MCP URLs and local install paths you trust.
 
 ## Browser app
 
-Start the Next.js app separately. The app opens without a MuAPI key; use its **Settings** modal to save or clear the optional MuAPI key and the server URL and token. The URL defaults to `http://127.0.0.1:3030`. Settings are stored in the browser's localStorage (`muapi_key`, `og_local_server_url`, and `og_local_server_token`), so use a trusted browser and device. The cloud app also uses a MuAPI cookie; serve the web app over HTTPS to protect it in transit.
-
-Open **Local Inference** in the header or Settings to reach `/local`. Connect using the saved settings; the page also allows editing them. If health reports a missing binary, install it there, then download a model and any missing Z-Image text encoder and VAE before generating. The `/events` stream reports generation progress, and Cancel stops the active generation. The `/local` page permits HTTP(S) connections to user-configured servers in its Content Security Policy; the rest of the app retains its existing policy. For remote use, the server must allow the exact origin of the browser UI. This API and UI are separate from Electron IPC; other studios still use their existing cloud providers.
+The browser stores the server URL and token in localStorage (`og_local_server_url` and `og_local_server_token`). sd.cpp results use the dedicated `/local` page; Wan2GP and sd.cpp model management and local generation in the Studio use the same HTTP service. Cloud studios continue to use their existing providers.

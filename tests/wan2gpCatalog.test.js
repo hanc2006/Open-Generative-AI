@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { WAN2GP_CATALOG, getModelById, buildWan2gpSettings } = require('../electron/lib/wan2gpCatalog');
+const { WAN2GP_CATALOG, getModelById, buildWan2gpSettings } = require('../server/wan2gp/wan2gpCatalog');
 
 test('catalog entries carry a real WanGP model_type and unique ids', () => {
     const ids = new Set();

@@ -1,7 +1,6 @@
 'use strict';
 
-// Copy of Electron's pure local-model catalog, independent of Electron runtime.
-// Keep in sync with electron/lib/modelCatalog.js while Electron remains unchanged.
+// Catalog for the standalone sd.cpp inference server.
 const ZIMAGE_AUXILIARY = {
     llm: {
         id: '__llm__',

@@ -49,20 +49,26 @@ function BinaryStatusBar(onStatusChange) {
     bar.appendChild(progressBar);
 
     const refresh = async () => {
-        const status = await localAI.getBinaryStatus();
         const text = bar.querySelector('#binary-status-text');
-        if (status.exists) {
-            text.textContent = t('localModels.installed');
-            text.className = 'text-[11px] text-green-400';
+        try {
+            const status = await localAI.getBinaryStatus();
+            if (status.exists) {
+                text.textContent = t('localModels.installed');
+                text.className = 'text-[11px] text-green-400';
+                btn.classList.add('hidden');
+            } else {
+                text.textContent = t('localModels.notInstalled');
+                text.className = 'text-[11px] text-yellow-400';
+                btn.textContent = t('localModels.installEngine');
+                btn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-black transition-all';
+                btn.classList.remove('hidden');
+            }
+            if (onStatusChange) onStatusChange(status.exists);
+        } catch (error) {
+            text.textContent = `${t('localModels.errorLoading')}: ${error.message}`;
+            text.className = 'text-[11px] text-red-400';
             btn.classList.add('hidden');
-        } else {
-            text.textContent = t('localModels.notInstalled');
-            text.className = 'text-[11px] text-yellow-400';
-            btn.textContent = t('localModels.installEngine');
-            btn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-black transition-all';
-            btn.classList.remove('hidden');
         }
-        if (onStatusChange) onStatusChange(status.exists);
     };
 
     btn.onclick = async () => {
@@ -172,10 +178,7 @@ function Wan2gpConfigBar(onChange) {
         </div>
         <div class="flex flex-col gap-1.5">
             <span class="text-[10px] font-bold text-secondary uppercase tracking-wider">${t('localModels.wan2gpFolder')}</span>
-            <div class="flex items-center gap-2">
-                <input id="wan2gp-dir" type="text" placeholder="/home/you/Wan2GP" class="${inputClass}"/>
-                <button id="wan2gp-browse" class="${secondaryBtn}">${t('localModels.browse')}</button>
-            </div>
+            <input id="wan2gp-dir" type="text" placeholder="/path/on/server/Wan2GP" class="${inputClass}"/>
             <input id="wan2gp-python" type="text" class="${inputClass}"/>
         </div>
         <div class="flex flex-col gap-1.5">
@@ -218,25 +221,26 @@ function Wan2gpConfigBar(onChange) {
 
     dirInput.oninput = updatePythonPlaceholder;
     (async () => {
-        const cfg = await localAI.getWan2gpConfig();
-        dirInput.value = cfg.dir || '';
-        pythonInput.value = cfg.python || '';
-        urlInput.value = cfg.url || '';
-        updatePythonPlaceholder();
-        if (cfg.dir || cfg.url) await runCheck({ quick: true });
-        else setStatus(t('localModels.notConfiguredNote'), 'muted');
+        try {
+            const cfg = await localAI.getWan2gpConfig();
+            dirInput.value = cfg.dir || '';
+            pythonInput.value = cfg.python || '';
+            urlInput.value = cfg.url || '';
+            updatePythonPlaceholder();
+            if (cfg.dir || cfg.url) await runCheck({ quick: true });
+            else setStatus(t('localModels.notConfiguredNote'), 'muted');
+        } catch (error) {
+            setStatus(`Could not load Wan2GP settings: ${error.message}`, 'err');
+        }
     })();
-
-    wrap.querySelector('#wan2gp-browse').onclick = async () => {
-        const dir = await localAI.pickWan2gpFolder();
-        if (dir) { dirInput.value = dir; updatePythonPlaceholder(); }
-    };
 
     checkBtn.onclick = async () => {
         const cfg = formValues();
         if (!cfg.dir && !cfg.url) { setStatus(t('localModels.wan2gpEnterFirst'), 'warn'); return; }
         checkBtn.disabled = true;
-        try { await runCheck(cfg); } finally { checkBtn.disabled = false; }
+        try { await runCheck(cfg); }
+        catch (error) { setStatus(`Wan2GP check failed: ${error.message}`, 'err'); }
+        finally { checkBtn.disabled = false; }
     };
 
     saveBtn.onclick = async () => {
@@ -247,7 +251,8 @@ function Wan2gpConfigBar(onChange) {
             if (cfg.dir || cfg.url) await runCheck({ quick: true });
             else setStatus(t('localModels.notConfiguredNote'), 'muted');
             onChange?.();
-        } finally { saveBtn.disabled = false; }
+        } catch (error) { setStatus(`Could not save Wan2GP settings: ${error.message}`, 'err'); }
+        finally { saveBtn.disabled = false; }
     };
 
     return wrap;

@@ -25,7 +25,7 @@
     "vite:dev": "vite",
     "vite:build": "vite build",
     "server:local-ai": "node server/server.js",
-    "test:local-ai": "node --test server/test/*.test.js"
+    "test:local-ai": "node --test server/test/*.test.js tests/*.test.js"
   },
   "dependencies": {
     "ai-agent": "file:./packages/Open-Poe-AI/packages/agents",
