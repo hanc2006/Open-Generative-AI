@@ -27,7 +27,7 @@ export function Header(navigate) {
     `;
 
     const menu = document.createElement('nav');
-    menu.className = 'hidden lg:flex items-center gap-6 text-[13px] font-bold text-secondary';
+    menu.className = 'hidden lg:flex items-center gap-5 text-[13px] whitespace-nowrap overflow-x-auto no-scrollbar font-bold text-secondary';
     const items = [
         { label: t('nav.image'),   page: 'image' },
         { label: t('nav.video'),   page: 'video' },
@@ -35,6 +35,15 @@ export function Header(navigate) {
         { label: t('nav.cinema'),  page: 'cinema' },
         { label: t('nav.workflows'), page: 'workflows' },
         { label: t('nav.agents'),  page: 'agents' },
+        { label: t('nav.layers'), page: 'layers' },
+        { label: t('nav.audio'), page: 'audio' },
+        { label: t('nav.clipping'), page: 'clipping' },
+        { label: t('nav.motionControl'), page: 'motion-control' },
+        { label: t('nav.vibeMotion'), page: 'vibe-motion' },
+        { label: t('nav.bodySwap'), page: 'body-swap' },
+        { label: t('nav.marketing'), page: 'marketing' },
+        { label: t('nav.aiInfluencer'), page: 'ai-influencer' },
+        { label: t('nav.apps'), page: 'apps' },
         { label: t('nav.mcpcli'),  page: 'mcp-cli' },
     ];
 

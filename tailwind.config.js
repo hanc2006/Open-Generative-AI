@@ -3,8 +3,6 @@ module.exports = {
     content: [
         "./index.html",
         "./src/**/*.{js,ts,jsx,tsx}",
-        "./app/**/*.{js,ts,jsx,tsx}",
-        "./components/**/*.{js,ts,jsx,tsx}",
         "./packages/studio/src/**/*.{js,jsx}",
         "./packages/Open-AI-Design-Agent/packages/design-agent/src/**/*.{js,jsx}",
         "./packages/Open-Poe-AI/packages/agents/src/**/*.{js,jsx,ts,tsx}",
