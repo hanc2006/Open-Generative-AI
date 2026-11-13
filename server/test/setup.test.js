@@ -6,9 +6,12 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
+const https = require('node:https');
+const { EventEmitter } = require('node:events');
+const { PassThrough } = require('node:stream');
 const { spawn } = require('node:child_process');
 const { pickBinaryAssetForPlatform } = require('../assets');
-const { catalogPath, downloadUrl, validateZip } = require('../downloads');
+const { catalogPath, downloadFile, downloadUrl, validateZip } = require('../downloads');
 
 test('selects compatible release assets and rejects unsupported architectures', () => {
     const zipNames = ['sd-master-Linux-x86_64-vulkan.zip', 'sd-master-Linux-x86_64.zip', 'sd-master-win-avx-x64.zip', 'sd-master-win-avx2-x64.zip'];
@@ -52,6 +55,43 @@ test('ZIP validation rejects traversal and symlink entries', () => {
             assert.throws(() => validateZip(file), /Unsafe/);
         }
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('download resumes a partial file across an HTTPS CDN redirect', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'local-ai-download-'));
+    const destination = path.join(dir, 'model');
+    fs.writeFileSync(`${destination}.part`, 'abc');
+    const original = https.get;
+    const requests = [];
+    https.get = (url, options, callback) => {
+        requests.push({ url: String(url), range: options.headers.Range });
+        const req = new EventEmitter();
+        req.setTimeout = () => req;
+        process.nextTick(() => {
+            const response = new PassThrough();
+            if (requests.length === 1) {
+                response.statusCode = 302;
+                response.headers = { location: 'https://cdn-lfs-us-1.hf.co/file' };
+                callback(response);
+                response.end();
+            } else {
+                response.statusCode = 206;
+                response.headers = { 'content-range': 'bytes 3-5/6', 'content-length': '3' };
+                callback(response);
+                response.end('def');
+            }
+        });
+        return req;
+    };
+    try {
+        await downloadFile('https://huggingface.co/model', destination);
+        assert.equal(fs.readFileSync(destination, 'utf8'), 'abcdef');
+        assert.deepEqual(requests.map(item => item.range), ['bytes=3-', 'bytes=3-']);
+        assert.equal(fs.existsSync(`${destination}.part`), false);
+    } finally {
+        https.get = original;
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 test('binary override and auxiliary states are exposed without network access', () => {

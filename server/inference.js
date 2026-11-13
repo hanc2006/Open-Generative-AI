@@ -74,8 +74,12 @@ function resolveBinaryPath() {
 function getBinaryStatus() {
     const binaryPath = resolveBinaryPath();
     let exists = false;
+    let executable = false;
     try { exists = fs.statSync(binaryPath).isFile(); } catch {}
-    return { exists, binary: exists, path: binaryPath, binaryPath, override: !!binaryOverride, dataDir, modelsDir, binDir, tmpDir, envVar: LOCAL_AI_DIR_ENV };
+    if (exists) {
+        try { fs.accessSync(binaryPath, process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK); executable = true; } catch {}
+    }
+    return { exists, executable, binary: exists && executable, path: binaryPath, binaryPath, override: !!binaryOverride, dataDir, modelsDir, binDir, tmpDir, envVar: LOCAL_AI_DIR_ENV };
 }
 async function extractZip(zipPath, destination) {
     validateZip(zipPath);
@@ -205,6 +209,7 @@ function generate(params = {}) {
     const binaryStatus = getBinaryStatus();
     const binaryPath = binaryStatus.path;
     if (!binaryStatus.exists) throw Object.assign(new Error(`sd.cpp binary is missing. Download it via POST /binary/download or set SD_CPP_BINARY (${binaryPath}).`), { status: 503 });
+    if (!binaryStatus.executable) throw Object.assign(new Error(`sd.cpp binary is not executable: ${binaryPath}`), { status: 503 });
     if (typeof params.prompt !== 'string' || params.prompt.length > 10_000) throw Object.assign(new Error('prompt must be a string of at most 10,000 characters.'), { status: 400 });
     const model = LOCAL_MODEL_CATALOG.find(item => item.id === params.model);
     if (!model) throw Object.assign(new Error(`Unknown model: ${params.model}`), { status: 404 });
