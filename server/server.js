@@ -85,6 +85,9 @@ const server = http.createServer(async (req, res) => {
         if (req.method === 'GET' && url.pathname === '/models') {
             return sendJson(res, 200, { models: inference.listModels() });
         }
+        if (req.method === 'GET' && url.pathname === '/auxiliaries') {
+            return sendJson(res, 200, { auxiliaries: inference.listAuxiliaries() });
+        }
         if (req.method === 'GET' && url.pathname === '/events') {
             res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
             res.write(`data: ${JSON.stringify({ type: 'connected', activeId: inference.getActiveGenerationId() })}\n\n`);
@@ -95,7 +98,7 @@ const server = http.createServer(async (req, res) => {
         }
         const modelDownload = url.pathname.match(/^\/models\/([a-z0-9-]+)\/download$/);
         if (req.method === 'POST' && modelDownload) return sendJson(res, 200, await inference.downloadModel(modelDownload[1]));
-        const auxiliaryDownload = url.pathname.match(/^\/auxiliary\/(llm|vae)\/download$/);
+        const auxiliaryDownload = url.pathname.match(/^\/(?:auxiliaries|auxiliary)\/([a-z0-9-]+)\/download$/);
         if (req.method === 'POST' && auxiliaryDownload) return sendJson(res, 200, await inference.downloadAuxiliary(auxiliaryDownload[1]));
         const modelDelete = url.pathname.match(/^\/models\/([a-z0-9-]+)$/);
         if (req.method === 'DELETE' && modelDelete) return sendJson(res, 200, inference.deleteModel(modelDelete[1]));

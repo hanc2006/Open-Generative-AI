@@ -23,11 +23,21 @@ export default function LocalInferenceClient() {
   const [seed, setSeed] = useState(-1);
   const [status, setStatus] = useState('Enter a server URL and connect.');
   const [connected, setConnected] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [session, setSession] = useState(null);
+  const [streamReady, setStreamReady] = useState(false);
+  const [binary, setBinary] = useState(null);
+  const [auxiliaries, setAuxiliaries] = useState([]);
+  const [operation, setOperation] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [downloads, setDownloads] = useState({});
   const [image, setImage] = useState('');
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState('');
-  const eventController = useRef(null);
+  const cancelled = useRef(false);
+  const generationId = useRef(null);
+  const cancelledId = useRef(null);
 
   useEffect(() => {
     setBaseUrl(localStorage.getItem(URL_KEY) || DEFAULT_URL);
@@ -47,78 +57,137 @@ export default function LocalInferenceClient() {
   }, [baseUrl, token]);
 
   const connect = useCallback(async () => {
-    setError(''); setStatus('Connecting…'); setConnected(false);
+    setError(''); setStatus('Connecting…'); setConnected(false); setSession(null);
+    setStreamReady(false); setConnecting(true); setDownloads({}); setGenerating(false);
     try {
-      const [health, result] = await Promise.all([request('/health'), request('/models')]);
+      const [health, result, auxiliaryResult] = await Promise.all([request('/health'), request('/models'), request('/auxiliaries')]);
+      setBinary(health);
+      setAuxiliaries(auxiliaryResult.auxiliaries || []);
       setModels(result.models || []);
       setModelId((current) => (result.models || []).some((model) => model.id === current) ? current : (result.models || [])[0]?.id || '');
       setConnected(true);
-      setStatus(health.binary ? `Connected · sd.cpp ready · models stored at ${health.modelsDir}` : `Connected, but sd.cpp binary was not found at ${health.binaryPath}`);
+      setGenerating(Boolean(health.active));
+      setSession({ base: normalizeBaseUrl(baseUrl), token });
+      setStatus('Connected. Connecting to progress stream…');
       localStorage.setItem(URL_KEY, normalizeBaseUrl(baseUrl));
       if (token) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY);
     } catch (e) {
       setError(e.message); setStatus('Could not connect. Check the URL, server status, token, and CORS allowlist.');
-    }
+    } finally { setConnecting(false); }
   }, [baseUrl, request, token]);
 
-  const refreshModels = useCallback(async () => {
-    const result = await request('/models');
+  const refreshSetup = useCallback(async () => {
+    const [health, result, auxiliaryResult] = await Promise.all([request('/health'), request('/models'), request('/auxiliaries')]);
+    setBinary(health);
     setModels(result.models || []);
-    return result.models || [];
+    setAuxiliaries(auxiliaryResult.auxiliaries || []);
   }, [request]);
 
-  const downloadModel = async (id) => {
-    setBusy(true); setError(''); setStatus(`Downloading ${id}…`);
+  const download = async (id, path, label) => {
+    setOperation('download'); setError(''); setStatus(`Downloading ${label}…`);
+    setDownloads((current) => ({ ...current, [id]: { id, phase: 'starting', progress: 0 } }));
     try {
-      await request(`/models/${encodeURIComponent(id)}/download`, { method: 'POST' });
-      await refreshModels();
-      setStatus(`${id} is ready.`);
-    } catch (e) { setError(e.message); setStatus('Model download failed.'); }
-    finally { setBusy(false); }
+      await request(path, { method: 'POST' });
+      await refreshSetup();
+      setDownloads((current) => ({ ...current, [id]: { id, phase: 'done', progress: 1 } }));
+      setStatus(`${label} is ready.`);
+    } catch (e) {
+      setDownloads((current) => ({ ...current, [id]: { ...current[id], id, phase: 'error', error: e.message } }));
+      setError(e.message); setStatus(`${label} download failed.`);
+      try { await refreshSetup(); } catch { /* Keep the original error. */ }
+    } finally { setOperation(null); }
   };
 
-  const watchEvents = useCallback(async () => {
-    eventController.current?.abort();
+  useEffect(() => {
+    if (!session) return undefined;
     const controller = new AbortController();
-    eventController.current = controller;
-    try {
+    let timer;
+    const handleEvent = (event) => {
+      if (event.type === 'connected') {
+        setGenerating(Boolean(event.activeId));
+      } else if (event.type === 'download' && event.id) {
+        setDownloads((current) => ({ ...current, [event.id]: event }));
+        if (event.phase === 'done' || event.phase === 'error') {
+          refreshSetup().catch((e) => { if (!controller.signal.aborted) setError(`Could not refresh setup: ${e.message}`); });
+        }
+      } else if (event.type === 'generation') {
+        if (event.status === 'starting' && event.id !== generationId.current) {
+          generationId.current = event.id;
+        }
+        if (event.id && event.id === cancelledId.current && event.status === 'error') return;
+        setProgress(event);
+        if (event.status === 'starting' || event.status === 'generating') setGenerating(true);
+        if (['done', 'cancelled', 'error'].includes(event.status)) setGenerating(false);
+        if (event.status === 'starting') setStatus(event.message || 'Loading the model…');
+        else if (event.status === 'generating') setStatus(`Generating · ${event.step}/${event.totalSteps}`);
+        else if (event.status === 'done') setStatus('Generation complete.');
+        else if (event.status === 'cancelled') { cancelled.current = true; cancelledId.current = event.id; setStatus('Generation cancelled.'); }
+        else if (event.status === 'error') { setError(event.error || 'Generation failed.'); setStatus('Generation failed.'); }
+      }
+    };
+    const watch = async () => {
+      while (!controller.signal.aborted) {
+        let reader;
+        try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await fetch(`${normalizeBaseUrl(baseUrl)}/events`, { headers, signal: controller.signal });
-      if (!response.ok || !response.body) return;
-      const reader = response.body.getReader();
+      if (!response.ok || !response.body) throw new Error(`Event stream returned HTTP ${response.status}`);
+      if (controller.signal.aborted) break;
+      reader = response.body.getReader();
+      await refreshSetup();
+      if (controller.signal.aborted) break;
+      setStreamReady(true);
+      setStatus('Connected to server and progress stream.');
       const decoder = new TextDecoder();
       let buffer = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const frames = buffer.split('\n\n');
+        const frames = buffer.split(/\r\n\r\n|\n\n|\r\r/);
         buffer = frames.pop() || '';
         for (const frame of frames) {
-          const dataLine = frame.split('\n').find((line) => line.startsWith('data: '));
-          if (!dataLine) continue;
-          try {
-            const event = JSON.parse(dataLine.slice(6));
-            if (event.type === 'generation') {
-              setProgress(event);
-              if (event.status === 'starting') setStatus('Loading the model…');
-              else if (event.status === 'generating') setStatus(`Generating · ${event.step}/${event.totalSteps}`);
-              else if (event.status === 'cancelled') setStatus('Generation cancelled.');
-              else if (event.status === 'error') setStatus(event.error || 'Generation failed.');
-            }
-          } catch { /* Ignore incomplete or unrelated event frames. */ }
+          const data = frame.split(/\r\n|\n|\r/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).replace(/^ /, '')).join('\n');
+          if (!data) continue;
+          if (controller.signal.aborted) break;
+          try { handleEvent(JSON.parse(data)); } catch { /* Ignore malformed events. */ }
         }
       }
-    } catch (e) {
-      if (e.name !== 'AbortError') console.warn('Local server event stream disconnected:', e);
-    }
-  }, [baseUrl, token]);
+        } catch (e) {
+          if (reader) reader.cancel().catch(() => {});
+          if (controller.signal.aborted) break;
+          console.warn('Local server event stream disconnected:', e);
+        }
+        if (controller.signal.aborted) break;
+        setStreamReady(false);
+        setDownloads((current) => Object.fromEntries(Object.entries(current).map(([id, item]) => [
+          id, ['done', 'error', 'cancelled'].includes(item.phase) ? item : { ...item, phase: 'interrupted' },
+        ])));
+        setStatus('Progress stream disconnected. Reconnecting…');
+        await new Promise((resolve) => {
+          const finish = () => { controller.signal.removeEventListener('abort', finish); resolve(); };
+          timer = setTimeout(finish, 2000);
+          controller.signal.addEventListener('abort', finish, { once: true });
+        });
+      }
+    };
+    watch();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [session, refreshSetup, baseUrl, token]);
+
+  const selectedModel = models.find((model) => model.id === modelId);
+  const auxiliaryStatus = selectedModel?.auxiliaryStatus || {};
+  const missingAuxiliary = Object.entries(auxiliaryStatus).filter(([, state]) => state !== 'downloaded');
+  const auxiliaryReady = Object.keys(auxiliaryStatus).length > 0 ? missingAuxiliary.length === 0 : !selectedModel?.requiresAuxiliary;
+  const downloadActive = Object.values(downloads).some((item) => !['done', 'error', 'cancelled', 'interrupted'].includes(item.phase));
+  const busy = Boolean(operation || generating || downloadActive);
+  const ready = connected && streamReady && binary?.exists && selectedModel?.state === 'downloaded' && auxiliaryReady && !busy;
 
   const generate = async (event) => {
     event.preventDefault();
-    if (!modelId || !prompt.trim()) { setError('Choose a model and enter a prompt.'); return; }
-    setBusy(true); setError(''); setImage(''); setProgress(null);
-    const eventTask = watchEvents();
+    if (!ready || !prompt.trim()) { setError('Complete setup, choose a model, and enter a prompt.'); return; }
+    cancelled.current = false;
+    setOperation('generation'); setGenerating(true); setError(''); setImage(''); setProgress(null); setStatus('Starting generation…');
     try {
       const result = await request('/generate', {
         method: 'POST',
@@ -128,13 +197,23 @@ export default function LocalInferenceClient() {
       setImage(result.url);
       setStatus(`Complete · seed ${result.seed}`);
       setProgress({ progress: 1, step: Number(steps), totalSteps: Number(steps), status: 'done' });
-    } catch (e) { setError(e.message); setStatus('Generation failed.'); }
-    finally { eventController.current?.abort(); await eventTask; setBusy(false); }
+    } catch (e) {
+      if (cancelled.current) setStatus('Generation cancelled.');
+      else { setError(e.message); setStatus('Generation failed.'); }
+    } finally { setGenerating(false); setOperation(null); setCancelling(false); }
   };
 
   const cancel = async () => {
-    try { await request('/cancel', { method: 'POST', body: '{}' }); }
-    catch (e) { setError(e.message); }
+    setCancelling(true);
+    cancelled.current = true;
+    try { await request('/cancel', { method: 'POST', body: '{}' }); setStatus('Cancellation requested.'); }
+    catch (e) { cancelled.current = false; setError(e.message); }
+    finally { setCancelling(false); }
+  };
+
+  const disconnect = () => {
+    setSession(null); setConnected(false); setStreamReady(false);
+    setStatus('Enter a server URL and connect.');
   };
 
   return (
@@ -150,16 +229,28 @@ export default function LocalInferenceClient() {
           <h2 className="font-bold">Inference server</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
             <label className="text-xs text-white/60">Server URL
-              <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={DEFAULT_URL} className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
+              <input value={baseUrl} disabled={busy || connecting} onChange={(e) => { disconnect(); setBaseUrl(e.target.value); }} placeholder={DEFAULT_URL} className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
             </label>
             <label className="text-xs text-white/60">Bearer token (optional for loopback)
-              <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="LOCAL_AI_TOKEN" autoComplete="off" className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
+              <input type="password" value={token} disabled={busy || connecting} onChange={(e) => { disconnect(); setToken(e.target.value); }} placeholder="LOCAL_AI_TOKEN" autoComplete="off" className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
             </label>
-            <button type="button" onClick={connect} className="self-end rounded-lg bg-cyan-300 px-5 py-2 text-sm font-bold text-black hover:bg-cyan-200">Connect</button>
+            <button type="button" disabled={busy || connecting} onClick={connect} className="self-end rounded-lg bg-cyan-300 px-5 py-2 text-sm font-bold text-black hover:bg-cyan-200 disabled:opacity-40">{connecting ? 'Connecting…' : 'Connect'}</button>
           </div>
           <p className="mt-3 text-xs text-white/45">For remote servers, use HTTPS or a trusted VPN/reverse proxy and configure the server’s exact browser origin in <code>LOCAL_AI_ALLOWED_ORIGINS</code>. Do not expose an unauthenticated server to the internet.</p>
           <p role="status" className={`mt-3 text-sm ${connected ? 'text-emerald-300' : 'text-white/60'}`}>{status}</p>
           {error && <p role="alert" className="mt-2 text-sm text-red-300">{error}</p>}
+          {connected && <div className="mt-4 space-y-3 text-sm text-white/70">
+            <p>sd.cpp: {binary?.exists ? 'Ready' : 'Not installed'}{binary?.path ? ` · ${binary.path}` : ''}</p>
+            {!binary?.exists && <button type="button" disabled={busy || !streamReady} onClick={() => download('__binary__', '/binary/download', 'sd.cpp')} className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">Download sd.cpp</button>}
+            {Object.values(downloads).map((item) => {
+              const label = item.id === '__binary__' ? 'sd.cpp' : auxiliaries.find((aux) => aux.id === item.id)?.displayName || models.find((model) => model.id === item.id)?.name || item.id;
+              const percent = Number.isFinite(item.progress) ? Math.round(Math.max(0, Math.min(1, item.progress)) * 100) : null;
+              return <div key={item.id} aria-live="polite">
+                <p>{label} · {item.phase}{percent !== null ? ` · ${percent}%` : ''}{item.error ? ` · ${item.error}` : ''}</p>
+                {percent !== null && <div className="mt-1 h-1.5 overflow-hidden rounded bg-white/10"><div className="h-full bg-cyan-300 transition-all" style={{ width: `${percent}%` }} /></div>}
+              </div>;
+            })}
+          </div>}
         </section>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
@@ -170,9 +261,17 @@ export default function LocalInferenceClient() {
                 {models.map((model) => <option key={model.id} value={model.id}>{model.name} · {model.state}</option>)}
               </select>
             </label>
-            {connected && models.find((model) => model.id === modelId)?.state !== 'downloaded' && modelId && (
-              <button type="button" disabled={busy} onClick={() => downloadModel(modelId)} className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">Download model to server</button>
+            {connected && selectedModel?.state !== 'downloaded' && modelId && (
+              <button type="button" disabled={busy || !streamReady} onClick={() => download(modelId, `/models/${encodeURIComponent(modelId)}/download`, selectedModel?.name || modelId)} className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">Download model to server</button>
             )}
+            {connected && Object.entries(auxiliaryStatus).map(([key, state]) => {
+              const auxiliary = auxiliaries.find((item) => item.key === key);
+              return <div key={key} className="text-sm text-white/70">
+                <p>{auxiliary?.displayName || key} · {state}</p>
+                {state !== 'downloaded' && auxiliary && <button type="button" disabled={busy || !streamReady} onClick={() => download(auxiliary.id, `/auxiliaries/${encodeURIComponent(key)}/download`, auxiliary.displayName || key)} className="mt-2 rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">Download {auxiliary.displayName || key}</button>}
+              </div>;
+            })}
+            {connected && selectedModel?.requiresAuxiliary && !Object.keys(auxiliaryStatus).length && <p className="text-sm text-amber-300">Required component status is unavailable. Reconnect to check setup.</p>}
             <label className="block text-xs text-white/60">Prompt
               <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} required rows={4} maxLength={10000} placeholder="Describe the image to create" className="mt-1 w-full resize-y rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
             </label>
@@ -186,8 +285,8 @@ export default function LocalInferenceClient() {
               <label className="text-xs text-white/60">Seed (-1 random)<input type="number" min="-1" value={seed} onChange={(e) => setSeed(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white" /></label>
             </div>
             <div className="flex gap-3">
-              <button disabled={!connected || busy || !models.some((model) => model.id === modelId && model.state === 'downloaded')} className="rounded-lg bg-cyan-300 px-5 py-2.5 text-sm font-black text-black disabled:cursor-not-allowed disabled:opacity-40">{busy ? 'Generating…' : 'Generate'}</button>
-              {busy && <button type="button" onClick={cancel} className="rounded-lg border border-red-400/30 px-4 py-2 text-sm text-red-200">Cancel</button>}
+              <button disabled={!ready || !prompt.trim()} className="rounded-lg bg-cyan-300 px-5 py-2.5 text-sm font-black text-black disabled:cursor-not-allowed disabled:opacity-40">{operation === 'generation' || generating ? 'Generating…' : 'Generate'}</button>
+              {(generating || operation === 'generation') && <button type="button" disabled={cancelling} onClick={cancel} className="rounded-lg border border-red-400/30 px-4 py-2 text-sm text-red-200 disabled:opacity-40">{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
             </div>
             {progress && <div aria-live="polite" className="text-xs text-white/60">{progress.status === 'generating' ? `Step ${progress.step}/${progress.totalSteps}` : status}<div className="mt-2 h-1.5 overflow-hidden rounded bg-white/10"><div className="h-full bg-cyan-300 transition-all" style={{ width: `${Math.round((progress.progress || 0) * 100)}%` }} /></div></div>}
           </form>
