@@ -24,7 +24,8 @@
     "setup": "git submodule update --init --recursive && npm install && npm run build:packages",
     "vite:dev": "vite",
     "vite:build": "vite build",
-    "server:local-ai": "node server/server.js"
+    "server:local-ai": "node server/server.js",
+    "test:local-ai": "node --test server/test/*.test.js"
   },
   "dependencies": {
     "ai-agent": "file:./packages/Open-Poe-AI/packages/agents",

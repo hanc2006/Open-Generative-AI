@@ -1,6 +1,9 @@
 const path = require('node:path');
 
 function pickBinaryAssetForPlatform({ platform, arch, zipNames }) {
+    if (!((platform === 'darwin' && arch === 'arm64') ||
+        (platform === 'win32' && arch === 'x64') ||
+        (platform === 'linux' && (arch === 'x64' || arch === 'arm64')))) return null;
     const candidates = zipNames.filter(name => name.startsWith('sd-master-') || name.includes('-bin-'));
     if (platform === 'darwin') return arch === 'arm64' ? candidates.find(n => n.includes('Darwin') && n.includes('arm64')) || null : null;
     if (platform === 'win32') {
