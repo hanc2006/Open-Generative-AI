@@ -10,11 +10,9 @@ const REACT_STUDIOS = {
   'vibe-motion': () => import('../packages/studio/src/components/VibeMotionStudio.jsx'),
   'body-swap': () => import('../packages/studio/src/components/RecastStudio.jsx'),
   marketing: () => import('../packages/studio/src/components/MarketingStudio.jsx'),
-  'ai-influencer': () => import('../packages/studio/src/components/AiInfluencerStudio.jsx'),
   workflows: () => import('./components/react/WorkflowHost.jsx'),
   agents: () => import('./components/react/AgentsHost.jsx'),
   local: () => import('./components/LocalInferenceStudio.jsx'),
-  apps: () => import('../packages/studio/src/components/AppsStudio.jsx'),
 };
 
 const app = document.querySelector('#app');
@@ -57,10 +55,6 @@ function navigate(page) {
     } else if (REACT_STUDIOS[page]) {
       import('./components/ReactStudio.js').then(({ ReactStudio }) => {
         wrapper.appendChild(ReactStudio(REACT_STUDIOS[page]));
-      });
-    } else if (page === 'mcp-cli') {
-      import('./components/McpCliStudio.js').then(({ McpCliStudio }) => {
-        wrapper.appendChild(McpCliStudio());
       });
     }
   }
