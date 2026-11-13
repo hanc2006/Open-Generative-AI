@@ -64,4 +64,4 @@ The server binds to loopback by default. A non-loopback bind requires `LOCAL_AI_
 
 ## Browser app
 
-The browser stores the server URL and token in localStorage (`og_local_server_url` and `og_local_server_token`). Wan2GP and sd.cpp model management and local generation in the Studio use the same HTTP service. Cloud studios continue to use their existing providers.
+The browser stores the server URL and token in localStorage (`og_local_server_url` and `og_local_server_token`). sd.cpp results can also be generated on the **Local Inference** tab; Wan2GP and sd.cpp model management and local generation in the Studio use the same HTTP service. Cloud studios continue to use their existing providers.

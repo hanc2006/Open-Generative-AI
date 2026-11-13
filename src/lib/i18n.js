@@ -67,6 +67,7 @@ const translations = {
         'nav.marketing': 'Marketing',
         'nav.aiInfluencer': 'AI Influencer',
         'nav.apps': 'Explore Apps',
+        'nav.local': 'Local Inference',
         'nav.settings': 'Settings',
 
         // Sidebar
@@ -300,6 +301,7 @@ const translations = {
         'nav.marketing': '营销',
         'nav.aiInfluencer': 'AI 网红',
         'nav.apps': '探索应用',
+        'nav.local': '本地推理',
         'nav.settings': '设置',
 
         // Sidebar

@@ -11,6 +11,7 @@ const REACT_STUDIOS = {
   'body-swap': () => import('../packages/studio/src/components/RecastStudio.jsx'),
   marketing: () => import('../packages/studio/src/components/MarketingStudio.jsx'),
   'ai-influencer': () => import('../packages/studio/src/components/AiInfluencerStudio.jsx'),
+  local: () => import('./components/LocalInferenceStudio.jsx'),
   apps: () => import('../packages/studio/src/components/AppsStudio.jsx'),
 };
 
