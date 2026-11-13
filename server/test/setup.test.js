@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { pickBinaryAssetForPlatform } = require('../assets');
 const { catalogPath, downloadUrl, validateZip } = require('../downloads');
@@ -72,4 +73,47 @@ test('binary override and auxiliary states are exposed without network access', 
             code === 0 ? resolve() : reject(new Error(`Child exited ${code}`));
         });
     });
+});
+
+test('HTTP health, auxiliaries, models and event stream are usable', async () => {
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'local-ai-http-'));
+            const port = await new Promise((resolve, reject) => {
+                const socket = net.createServer();
+                socket.on('error', reject);
+                socket.listen(0, '127.0.0.1', () => {
+                    const value = socket.address().port;
+                    socket.close(() => resolve(value));
+                });
+            });
+            const child = spawn(process.execPath, [path.join(__dirname, '../server.js')], {
+                env: { ...process.env, HOST: '127.0.0.1', PORT: String(port), LOCAL_AI_TOKEN: '', OPEN_GENERATIVE_AI_LOCAL_AI_DIR: dir, SD_CPP_BINARY: path.join(dir, 'missing') },
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            const base = `http://127.0.0.1:${port}`;
+            let reader;
+            try {
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('Server did not start.')), 5000);
+                    child.once('error', reject);
+                    child.once('exit', code => reject(new Error(`Server exited ${code}.`)));
+                    child.stdout.once('data', () => { clearTimeout(timeout); resolve(); });
+                });
+                const health = await (await fetch(`${base}/health`)).json();
+                assert.equal(health.exists, false);
+                assert.equal(health.active, false);
+                const auxiliaries = (await (await fetch(`${base}/auxiliaries`)).json()).auxiliaries;
+                const models = (await (await fetch(`${base}/models`)).json()).models;
+                assert.equal(auxiliaries.length, 2);
+                assert.equal(models.find(model => model.id === 'z-image-turbo').auxiliaryStatus.vae, 'not-downloaded');
+                assert.equal((await fetch(`${base}/auxiliaries/invalid/download`, { method: 'POST' })).status, 404);
+                assert.equal((await fetch(`${base}/binary/download`, { method: 'POST' })).status, 409);
+                const events = await fetch(`${base}/events`);
+                reader = events.body.getReader();
+                assert.match(new TextDecoder().decode((await reader.read()).value), /"type":"connected"/);
+            } finally {
+                await reader?.cancel();
+                child.kill('SIGTERM');
+                await new Promise(resolve => child.once('close', resolve));
+                fs.rmSync(dir, { recursive: true, force: true });
+            }
 });

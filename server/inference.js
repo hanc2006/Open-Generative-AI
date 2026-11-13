@@ -36,19 +36,25 @@ function emit(event) { try { emitEvent(event); } catch (error) { console.error('
 
 function fetchJson(url) {
     return new Promise((resolve, reject) => {
-        https.get(url, { headers: { 'User-Agent': 'open-generative-ai-local-server/1.0', Accept: 'application/vnd.github+json' } }, response => {
+        const request = https.get(url, { headers: { 'User-Agent': 'open-generative-ai-local-server/1.0', Accept: 'application/vnd.github+json' } }, response => {
             if (response.statusCode !== 200) { response.resume(); reject(new Error(`HTTP ${response.statusCode} from GitHub release API`)); return; }
             let body = '';
             response.setEncoding('utf8');
-            response.on('data', chunk => { body += chunk; });
+            response.on('data', chunk => {
+                body += chunk;
+                if (body.length > 10 * 1024 * 1024) response.destroy(new Error('GitHub release response is too large.'));
+            });
             response.on('end', () => { try { resolve(JSON.parse(body)); } catch (error) { reject(error); } });
             response.on('error', reject);
-        }).on('error', reject);
+        });
+        request.setTimeout(60_000, () => request.destroy(new Error('GitHub release request timed out.')));
+        request.on('error', reject);
     });
 }
 function findFile(dir, name) {
     if (!fs.existsSync(dir)) return null;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name.startsWith('.sd-cpp-')) continue;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) { const nested = findFile(full, name); if (nested) return nested; }
         else if (entry.isFile() && entry.name === name) return full;
@@ -63,7 +69,7 @@ function ensureBinaryPermissions(dir) {
     }
 }
 function resolveBinaryPath() {
-    return binaryOverride || findFile(installedDir, binaryName) || path.join(binDir, binaryName);
+    return binaryOverride || findFile(installedDir, binaryName) || findFile(binDir, binaryName) || path.join(binDir, binaryName);
 }
 function getBinaryStatus() {
     const binaryPath = resolveBinaryPath();
