@@ -42,10 +42,7 @@ export function Header(navigate) {
         { label: t('nav.vibeMotion'), page: 'vibe-motion' },
         { label: t('nav.bodySwap'), page: 'body-swap' },
         { label: t('nav.marketing'), page: 'marketing' },
-        { label: t('nav.aiInfluencer'), page: 'ai-influencer' },
-        { label: t('nav.apps'), page: 'apps' },
         { label: t('nav.local'), page: 'local' },
-        { label: t('nav.mcpcli'),  page: 'mcp-cli' },
     ];
 
     items.forEach(({ label, page }, idx) => {

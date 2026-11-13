@@ -57,7 +57,6 @@ const translations = {
         'nav.cinema': 'Cinema Studio',
         'nav.workflows': 'Workflows',
         'nav.agents': 'Agents',
-        'nav.mcpcli': 'MCP & CLI',
         'nav.layers': 'Layers',
         'nav.audio': 'Audio',
         'nav.clipping': 'AI Clipping',
@@ -65,8 +64,6 @@ const translations = {
         'nav.vibeMotion': 'Vibe Motion',
         'nav.bodySwap': 'Body Swap',
         'nav.marketing': 'Marketing',
-        'nav.aiInfluencer': 'AI Influencer',
-        'nav.apps': 'Explore Apps',
         'nav.local': 'Local Inference',
         'nav.settings': 'Settings',
 
@@ -278,10 +275,6 @@ const translations = {
         'web.switchToZh': '切换为中文',
 
         // MCP & CLI page
-        'mcp.tagline': 'For developers & AI agents',
-        'mcp.title': 'MCP & CLI',
-        'mcp.subtitle': 'Use Open Generative AI from your terminal, your IDE, or any MCP-compatible assistant. Generate cinematic images, videos, and audio across 100+ models — without leaving your workflow.',
-        'mcp.quickStart': 'Quick start',
     },
     zh: {
         // Navigation
@@ -291,7 +284,6 @@ const translations = {
         'nav.cinema': '电影工作室',
         'nav.workflows': '工作流',
         'nav.agents': '智能体',
-        'nav.mcpcli': 'MCP & CLI',
         'nav.layers': '图层',
         'nav.audio': '音频',
         'nav.clipping': 'AI 剪辑',
@@ -299,8 +291,6 @@ const translations = {
         'nav.vibeMotion': 'Vibe 动效',
         'nav.bodySwap': '换身',
         'nav.marketing': '营销',
-        'nav.aiInfluencer': 'AI 网红',
-        'nav.apps': '探索应用',
         'nav.local': '本地推理',
         'nav.settings': '设置',
 
@@ -512,10 +502,6 @@ const translations = {
         'web.switchToZh': '切换为中文',
 
         // MCP & CLI page
-        'mcp.tagline': '面向开发者与 AI 智能体',
-        'mcp.title': 'MCP & CLI',
-        'mcp.subtitle': '在终端、IDE 或任何兼容 MCP 的助手中使用 Open Generative AI。跨 100+ 模型生成电影级图像、视频和音频 — 无需离开您的工作流。',
-        'mcp.quickStart': '快速开始',
     },
 };
 
