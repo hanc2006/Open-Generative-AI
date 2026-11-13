@@ -23,9 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Electron build output
+# Build output
 release/
-.webpack/
 
 # Next.js
 .next/

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createProgressParser, findSavedPath, summarizeRun } = require('../electron/lib/wan2gpOutput');
+const { createProgressParser, findSavedPath, summarizeRun } = require('../server/wan2gp/wan2gpOutput');
 
 // Excerpts of real `wgp.py --process` console output (WanGP v13.141).
 const LOADING = [

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createMcpClient, normalizeMcpUrl, toProgressEvent } = require('../electron/lib/wan2gpMcp');
+const { createMcpClient, normalizeMcpUrl, toProgressEvent } = require('../server/wan2gp/wan2gpMcp');
 
 // Minimal fake of WanGP's MCP server (Streamable HTTP, SSE-framed replies).
 function fakeServer(tools) {

@@ -1,6 +1,6 @@
 // Wan2GP model catalog + settings builder.
 // `modelType` is the real WanGP model_type: the basename of <Wan2GP>/defaults/<modelType>.json.
-// Pure module (no electron import) so it can be unit-tested with node:test.
+// Pure module so it can be unit-tested with node:test.
 
 const RES_480P = { '16:9': '832x480', '9:16': '480x832', '1:1': '720x720', '4:3': '832x624', '3:4': '624x832' };
 const RES_720P = { '16:9': '1280x720', '9:16': '720x1280', '1:1': '960x960', '4:3': '1104x832', '3:4': '832x1104' };

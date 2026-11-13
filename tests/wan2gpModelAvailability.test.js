@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { withWan2gpAvailability } = require('../electron/lib/wan2gpModelAvailability');
+const { withWan2gpAvailability } = require('../server/wan2gp/wan2gpModelAvailability');
 
 const wanModel = {
     id: 'wan2gp:wan21-t2v-1.3b',

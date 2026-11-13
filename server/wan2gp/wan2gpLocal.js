@@ -1,5 +1,5 @@
 // Local Wan2GP engine: runs `wgp.py --process settings.json` from the user's
-// Wan2GP folder. No electron import — the provider passes paths in.
+// Wan2GP folder; the HTTP provider passes paths in.
 
 const fs = require('fs');
 const path = require('path');

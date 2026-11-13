@@ -2,7 +2,7 @@
 // Two providers:
 //   - sdcpp: bundled engine, weights live on disk
 //   - wan2gp: user-installed Wan2GP (local folder or remote MCP server)
-// Mirrors electron/lib/modelCatalog.js (sd.cpp) and electron/lib/wan2gpCatalog.js (wan2gp).
+// Browser-side catalog for models exposed by the local inference server.
 export const LOCAL_MODEL_CATALOG = [
     // ── sd.cpp: Z-Image (Tongyi-MAI) ────────────────────────────────────────
     {

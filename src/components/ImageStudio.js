@@ -200,7 +200,7 @@ export function ImageStudio() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="opacity-60 text-secondary"><path d="M6 2L3 6v15a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6z"/></svg>
     `, '720p', 'quality-btn', t('image.qualityTooltip'));
 
-    // Local / API source toggle (only shown in Electron)
+    // Local / API source toggle connects to the configured inference server.
     let localToggleBtn = null;
     if (isLocalAIAvailable()) {
         localToggleBtn = document.createElement('button');

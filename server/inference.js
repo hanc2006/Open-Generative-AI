@@ -1,7 +1,6 @@
 'use strict';
 
-// Standalone sd.cpp runtime, porting Electron's localInference functionality
-// without importing Electron. Keep electron/lib/localInference.js untouched.
+// Standalone sd.cpp runtime for the HTTP inference server.
 const fs = require('node:fs');
 const path = require('node:path');
 const https = require('node:https');

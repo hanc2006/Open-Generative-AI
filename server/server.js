@@ -1,23 +1,26 @@
 'use strict';
 
-// HTTP adapter over server/inference.js. The server runtime is a plain Node
-// port of Electron's local inference behavior; Electron files remain untouched.
+// HTTP adapter for the standalone local inference service.
 const http = require('node:http');
+const fs = require('node:fs');
 const { timingSafeEqual } = require('node:crypto');
 const inference = require('./inference');
+const wan2gp = require('./wan2gp/provider');
 
 const host = process.env.HOST || '127.0.0.1';
 const port = Number(process.env.PORT || 3030);
 const token = process.env.LOCAL_AI_TOKEN || '';
 const allowedOrigins = (process.env.LOCAL_AI_ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean);
 const eventClients = new Set();
-inference.setEventEmitter(event => {
+const emitEvent = event => {
     const payload = `data: ${JSON.stringify(event)}\n\n`;
     for (const response of eventClients) {
         if (!response.destroyed) response.write(payload);
         else eventClients.delete(response);
     }
-});
+};
+inference.setEventEmitter(emitEvent);
+wan2gp.setEventEmitter(emitEvent);
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535.');
 if (!['127.0.0.1', '::1', 'localhost'].includes(host) && !token) {
@@ -68,6 +71,26 @@ function readJson(req) {
         req.on('error', reject);
     });
 }
+function readRaw(req, maxBytes) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        let length = 0;
+        let tooLarge = false;
+        req.on('data', chunk => {
+            if (tooLarge) return;
+            length += chunk.length;
+            if (length > maxBytes) {
+                tooLarge = true;
+                reject(Object.assign(new Error(`Request body exceeds ${maxBytes} bytes.`), { status: 413 }));
+                req.resume();
+            } else chunks.push(chunk);
+        });
+        req.on('end', () => {
+            if (!tooLarge) resolve(Buffer.concat(chunks));
+        });
+        req.on('error', reject);
+    });
+}
 
 const server = http.createServer(async (req, res) => {
     if (!setCors(req, res)) return sendJson(res, 403, { error: 'Origin not allowed. Configure LOCAL_AI_ALLOWED_ORIGINS with the exact web app origin.' });
@@ -104,6 +127,31 @@ const server = http.createServer(async (req, res) => {
         if (req.method === 'DELETE' && modelDelete) return sendJson(res, 200, inference.deleteModel(modelDelete[1]));
         if (req.method === 'POST' && url.pathname === '/generate') return sendJson(res, 200, await inference.generate(await readJson(req)));
         if (req.method === 'POST' && url.pathname === '/cancel') return sendJson(res, 200, inference.cancelGeneration());
+        if (url.pathname === '/wan2gp/config' && req.method === 'GET') return sendJson(res, 200, wan2gp.getConfig());
+        if (url.pathname === '/wan2gp/config' && req.method === 'POST') return sendJson(res, 200, wan2gp.setConfig(await readJson(req)));
+        if (url.pathname === '/wan2gp/check' && req.method === 'POST') return sendJson(res, 200, await wan2gp.check(await readJson(req)));
+        if (url.pathname === '/wan2gp/probe' && req.method === 'POST') {
+            const body = await readJson(req);
+            return sendJson(res, 200, await wan2gp.probeRemote(body.url));
+        }
+        if (url.pathname === '/wan2gp/models' && req.method === 'GET') return sendJson(res, 200, { models: await wan2gp.listModels() });
+        if (url.pathname === '/wan2gp/generate' && req.method === 'POST') return sendJson(res, 200, await wan2gp.generate(await readJson(req)));
+        if (url.pathname === '/wan2gp/cancel' && req.method === 'POST') return sendJson(res, 200, wan2gp.cancelGeneration());
+        if (url.pathname === '/wan2gp/upload' && req.method === 'POST') {
+            const type = req.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase();
+            const bytes = await readRaw(req, 100 * 1024 * 1024);
+            return sendJson(res, 200, wan2gp.saveInput({ name: req.headers['x-file-name'], type, bytes }));
+        }
+        const wanMedia = url.pathname.match(/^\/wan2gp\/media\/([\da-f-]{36})\/([^/]+)$/i);
+        if (req.method === 'GET' && wanMedia) {
+            const media = wan2gp.readMedia(decodeURIComponent(wanMedia[1]), decodeURIComponent(wanMedia[2]));
+            if (!media) return sendJson(res, 404, { error: 'Media not found.' });
+            const contentType = { '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.mov': 'video/quicktime', '.webm': 'video/webm', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[media.extension] || 'application/octet-stream';
+            const stat = fs.statSync(media.filePath);
+            res.writeHead(200, { 'Content-Type': contentType, 'Content-Length': stat.size, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+            fs.createReadStream(media.filePath).pipe(res);
+            return;
+        }
         return sendJson(res, 404, { error: 'Not found.' });
     } catch (error) {
         if (!res.headersSent) sendJson(res, error.status || 500, { error: error.message || 'Internal server error.' });
@@ -112,7 +160,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, host, () => console.log(`Local AI server listening on http://${host}:${port}; data: ${inference.dataDir}`));
 async function shutdown() {
-    const generationStopped = inference.waitForGeneration();
+    const generationStopped = Promise.all([inference.waitForGeneration(), wan2gp.shutdown()]);
     inference.cancelGeneration();
     for (const response of eventClients) response.end();
     eventClients.clear();
